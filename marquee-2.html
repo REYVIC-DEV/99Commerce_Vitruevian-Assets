@@ -1,0 +1,13 @@
+<style>
+.marquee-item-2{
+flex: 0 0 auto;
+  animation: scroll-marquee 20s linear infinite;
+}
+.marquee-con2:hover .marquee-item-2{
+  animation-play-state: paused;
+}
+@keyframes scroll-marquee {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(-100%, 0); } /* Move until text is off-screen to the left */
+}
+</style>
