@@ -1,0 +1,42 @@
+<script>
+  function initProductSwiper() {
+    const el = document.querySelector(".product-swiper");
+    if (!el || el.classList.contains("swiper-initialized")) return;
+
+    new Swiper(el, {
+      speed: 400,
+      spaceBetween: 16,
+      slidesPerView: 'auto',
+      rewind: true,
+      watchOverflow: true,
+      centerInsufficientSlides: true,
+      centeredSlidesBounds: true,
+      observer: true,
+      observeParents: true,
+      pagination: {
+        el: '.product-pagination',
+        type: 'bullets',
+        clickable: true,
+      },
+      navigation: {
+        nextEl: '.product-next',
+        prevEl: '.product-prev',
+      },
+    });
+  }
+
+  // Run once
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(initProductSwiper, 300);
+  });
+
+  // Run again if DOM changes (Lightfunnels re-render)
+  const productObserver = new MutationObserver(function () {
+    initProductSwiper();
+  });
+
+  productObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+</script>

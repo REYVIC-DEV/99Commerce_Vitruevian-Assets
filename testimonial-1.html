@@ -1,8 +1,3 @@
-<link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/swiper@12/swiper-bundle.min.css"
-/>
-
 <style>
   .testimonial-swiper {
     overflow: hidden !important;
@@ -11,6 +6,18 @@
   .testimonial-swiper .swiper-slide {
     width: 431px !important;
   }
+  .testimonial-pagination {
+    margin-top: 30px !important;
+    display: flex !important;
+    justify-content: center !important;
+  }
+  .testimonial-pagination .swiper-pagination-bullet {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  .testimonial-pagination .swiper-pagination-bullet-active {
+    background: #29a31b !important;
+  }
   @media (max-width: 1024px) {
     .testimonial-swiper .swiper-slide {
       width: 293px !important;
@@ -18,7 +25,7 @@
   }
   @media (max-width: 768px) {
     .testimonial-swiper .swiper-slide {
-      width: 224px !important;
+      width: 293px !important;
     }
     .testimonial-swiper {
       padding: 0 20px;

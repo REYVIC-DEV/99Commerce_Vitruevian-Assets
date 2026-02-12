@@ -1,7 +1,3 @@
-<script
-  src="https://cdn.jsdelivr.net/npm/swiper@12/swiper-bundle.min.js"
-  defer
-></script>
 <script>
   function initTestimonialSwiper() {
     const el = document.querySelector(".testimonial-swiper");
@@ -10,12 +6,22 @@
     new Swiper(el, {
       speed: 400,
       spaceBetween: 16,
-      slidesPerView: "auto",
+      slidesPerView: 'auto',
+      rewind: true,
       watchOverflow: true,
       centerInsufficientSlides: true,
       centeredSlidesBounds: true,
       observer: true,
       observeParents: true,
+      pagination: {
+        el: '.testimonial-pagination',
+        type: 'bullets',
+        clickable: true,
+      },
+      navigation: {
+        nextEl: '.testimonial-next',
+        prevEl: '.testimonial-prev',
+      },
     });
   }
 
@@ -25,11 +31,11 @@
   });
 
   // Run again if DOM changes (Lightfunnels re-render)
-  const observer = new MutationObserver(function () {
+  const testimonialObserver = new MutationObserver(function () {
     initTestimonialSwiper();
   });
 
-  observer.observe(document.body, {
+  testimonialObserver.observe(document.body, {
     childList: true,
     subtree: true,
   });
