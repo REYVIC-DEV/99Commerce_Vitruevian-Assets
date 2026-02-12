@@ -1,0 +1,118 @@
+<style>
+
+/* =========================================================
+   DESKTOP ONLY (769px and above)
+   ========================================================= */
+@media (min-width: 769px) {
+
+  .accordion-card{
+    position: relative;
+    perspective: 1200px;
+    height: 391px !important;
+  }
+
+  .accordion-inner{
+    position: relative;
+    width: 100%;
+    transform-style: preserve-3d;
+    transition: transform 600ms ease;
+  }
+
+  .accordion-front,
+  .accordion-back{
+    width: 100%;
+    position:relative;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  .accordion-back{
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: rotateY(180deg);
+  }
+
+  .accordion-card.accordion-active .accordion-inner{
+    transform: rotateY(180deg);
+  }
+
+  .accordion-card.accordion-active .accordion-front{
+    pointer-events: none;
+  }
+
+  .accordion-card:not(.accordion-active) .accordion-back{
+    pointer-events: none;
+  }
+
+  /* plus / minus visibility */
+  .accordion-toggle.minus{
+    display: none;
+  }
+
+  .accordion-card.accordion-active .accordion-toggle.plus{
+    display: none;
+  }
+
+  .accordion-card.accordion-active .accordion-toggle.minus{
+    display: inline-flex;
+  }
+
+  .accordion-toggle.plus,
+  .accordion-toggle.minus{
+    margin-top: auto;
+  }
+
+}
+@media (max-width: 1024px) {
+
+  .accordion-toggle.minus{
+    display: none !important;
+  }
+}
+/* =========================================================
+   MOBILE (Below 769px)
+   No flip behavior
+   ========================================================= */
+@media (max-width: 768px) {
+  .accordion-inner{
+    height: auto !important;
+    transform: none !important;
+  }
+
+  .accordion-back{
+    position: relative;
+    transform: none !important;
+  }
+}
+
+</style>
+
+<script>
+document.addEventListener('click', function (e) {
+
+  // Only run JS on desktop
+  if (window.innerWidth < 769) return;
+
+  const plus = e.target.closest('.accordion-toggle.plus');
+  if (plus) {
+    const card = plus.closest('.accordion-card');
+    if (!card) return;
+
+    document.querySelectorAll('.accordion-card')
+      .forEach(c => c.classList.remove('accordion-active'));
+
+    card.classList.add('accordion-active');
+    return;
+  }
+
+  const minus = e.target.closest('.accordion-toggle.minus');
+  if (minus) {
+    const card = minus.closest('.accordion-card');
+    if (!card) return;
+
+    card.classList.remove('accordion-active');
+  }
+
+});
+</script>
