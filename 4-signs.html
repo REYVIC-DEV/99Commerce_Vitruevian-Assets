@@ -1,0 +1,73 @@
+<style>
+/* ==============================
+   Base Card Transition
+============================== */
+.four-signs {
+  transition: background 0.3s ease;
+}
+
+/* ==============================
+   Content (Collapsed by Default)
+============================== */
+.four-signs .info {
+  overflow: hidden;
+  margin-bottom: -2px !important;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  transition: 
+    all 0.5s ease;
+}
+
+/* ==============================
+   Active State (Expanded)
+============================== */
+.four-signs.active .info {
+  max-height: 1000px; /* Increase if needed */
+  padding-top: 16px;   /* Adjust to your design */
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+/* ==============================
+   Plus / Minus Toggle Visibility
+============================== */
+.four-signs .minus {
+  display: none;
+}
+
+.four-signs.active .plus {
+  display: none;
+}
+
+.four-signs.active .minus {
+  display: inline-flex;
+}
+
+</style>
+<script>
+(function () {
+
+  document.addEventListener('click', function (e) {
+
+    const toggle = e.target.closest('.toggle');
+    if (!toggle) return;
+
+    const parent = toggle.closest('.four-signs');
+    if (!parent) return;
+
+    const isActive = parent.classList.contains('active');
+
+    // Remove active from all
+    document.querySelectorAll('.four-signs')
+      .forEach(el => el.classList.remove('active'));
+
+    // If it wasn't active before, activate it
+    if (!isActive) {
+      parent.classList.add('active');
+    }
+
+  });
+
+})();
+</script>
