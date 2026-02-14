@@ -1,0 +1,46 @@
+<style>
+  accordion-2-card {
+    transition: all 0.3s ease;
+  }
+  /* hide minus by default */
+  .accordion-2-toggle .plus {
+    pointer-events: none;
+  }
+  .accordion-2-toggle .minus {
+    display: none;
+    pointer-events: none;
+  }
+
+  /* when active: hide plus */
+  .accordion-2-card.accordion-2-active .accordion-2-toggle .plus {
+    display: none;
+    pointer-events: none;
+  }
+
+  /* when active: show minus */
+  .accordion-2-card.accordion-2-active .accordion-2-toggle .minus {
+    display: inline-flex;
+    pointer-events: none;
+  }
+</style>
+<script>
+  document.addEventListener("click", function (e) {
+    const toggle = e.target.closest(".accordion-2-toggle");
+    if (!toggle) return;
+
+    const card = toggle.closest(".accordion-2-card");
+    if (!card) return;
+
+    const isActive = card.classList.contains("accordion-2-active");
+
+    // close all first
+    document
+      .querySelectorAll(".accordion-2-card")
+      .forEach((c) => c.classList.remove("accordion-2-active"));
+
+    // reopen if it wasn't already open
+    if (!isActive) {
+      card.classList.add("accordion-2-active");
+    }
+  });
+</script>
