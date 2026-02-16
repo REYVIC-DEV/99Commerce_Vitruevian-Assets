@@ -1,0 +1,84 @@
+<!-- Scroll Progress Bar -->
+<style>
+  #lf-scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 6px;
+    pointer-events: none;
+    z-index: 999999;
+
+    opacity: 0;
+    transform: translateY(-100%);
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  #lf-scroll-progress.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #lf-scroll-progress .lf-scroll-progress__bar {
+    height: 100%;
+    width: 0px;
+    background: #e26900; /* Change color here */
+  }
+</style>
+
+<div id="lf-scroll-progress">
+  <div class="lf-scroll-progress__bar"></div>
+</div>
+
+<script>
+(function () {
+  var THRESHOLD_PERCENT = 10;
+
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function getScrollPercent() {
+    var doc = document.documentElement;
+    var scrollTop = window.pageYOffset || doc.scrollTop || 0;
+    var scrollHeight = doc.scrollHeight;
+    var clientHeight = window.innerHeight;
+    var scrollable = scrollHeight - clientHeight;
+
+    if (scrollable <= 0) return 0;
+
+    return clamp((scrollTop / scrollable) * 100, 0, 100);
+  }
+
+  function update() {
+    var wrap = document.getElementById("lf-scroll-progress");
+    var bar = wrap.querySelector(".lf-scroll-progress__bar");
+
+    var percent = getScrollPercent();
+    var pxWidth = (percent / 100) * window.innerWidth;
+
+    bar.style.width = pxWidth.toFixed(2) + "px";
+
+    if (percent >= THRESHOLD_PERCENT) {
+      wrap.classList.add("is-visible");
+    } else {
+      wrap.classList.remove("is-visible");
+    }
+  }
+
+  var ticking = false;
+  function handle() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      update();
+      ticking = false;
+    });
+  }
+
+  window.addEventListener("scroll", handle, { passive: true });
+  window.addEventListener("resize", handle);
+
+  update();
+})();
+</script>

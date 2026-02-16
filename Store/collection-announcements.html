@@ -1,0 +1,40 @@
+<style>
+
+</style>
+<script>
+  function initAnnounceSlider() {
+    const el = document.querySelector(".announce-slider");
+    if (!el || el.classList.contains("swiper-initialized")) return;
+
+    new Swiper(el, {
+      speed: 400,
+      spaceBetween: 0,
+      slidesPerView: 1,
+      autoplay: {
+        delay: 3000,
+        disableOnInteraction: false,
+      },
+      watchOverflow: true,
+      loop: true,
+      centerInsufficientSlides: true,
+      centeredSlidesBounds: true,
+      observer: true,
+      observeParents: true,
+    });
+  }
+
+  // Run once
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(initAnnounceSlider, 300);
+  });
+
+  // Run again if DOM changes (Lightfunnels re-render)
+  const announceSliderObserver = new MutationObserver(function () {
+    initAnnounceSlider();
+  });
+
+  announceSliderObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+</script>
