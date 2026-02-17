@@ -1,0 +1,122 @@
+<script>
+(() => {
+  const WRAPPER_SELECTOR = "#use-sh-bill-add";
+  const INPUT_SELECTOR = "#use-sh-bill-add input[type='checkbox']";
+  const TARGET_SELECTOR = ".billing-address-inputs";
+
+  console.log("[BillingToggle] Script initialized");
+
+  function getInput() {
+    const input = document.querySelector(INPUT_SELECTOR);
+    if (!input) console.log("[BillingToggle] Checkbox <input> not found yet");
+    return input;
+  }
+
+  function setDisabledWithin(container, disabled) {
+    const fields = container.querySelectorAll("input, select, textarea, button");
+
+    console.log(
+      `[BillingToggle] ${disabled ? "Disabling" : "Enabling"} fields:`,
+      fields.length
+    );
+
+    fields.forEach((field) => {
+      // Snapshot original disabled state once
+      if (field.dataset.btInit !== "1") {
+        field.dataset.btInit = "1";
+        field.dataset.btWasDisabled = field.disabled ? "1" : "0";
+      }
+
+      if (disabled) {
+        field.disabled = true;
+      } else {
+        // Only re-enable if it wasn't disabled originally
+        field.disabled = field.dataset.btWasDisabled === "1";
+      }
+    });
+  }
+
+  function applyState(checked, reason) {
+    const targets = document.querySelectorAll(TARGET_SELECTOR);
+
+    console.log(
+      `[BillingToggle] applyState (${reason}) | checked:`,
+      checked,
+      "| targets:",
+      targets.length
+    );
+
+    targets.forEach((container) => {
+      // Hide/show
+      container.style.display = checked ? "none" : "";
+
+      // Disable/enable form controls inside
+      setDisabledWithin(container, checked);
+    });
+  }
+
+  function updateVisibility(reason = "update") {
+    const input = getInput();
+    if (!input) return;
+    applyState(!!input.checked, reason);
+  }
+
+  function attachListener() {
+    const wrapper = document.querySelector(WRAPPER_SELECTOR);
+    const input = getInput();
+    if (!wrapper || !input) return;
+
+    // If React replaces the input, attach again to the new node
+    if (input.dataset.listenerAttached === "true") {
+      updateVisibility("listener already attached (refresh)");
+      return;
+    }
+
+    console.log("[BillingToggle] Attaching listeners to input");
+
+    input.addEventListener("change", (e) => {
+      console.log("[BillingToggle] input change detected ->", e.target.checked);
+      applyState(!!e.target.checked, "change");
+    });
+
+    // Fallback: wrapper click (sometimes React toggles after click)
+    wrapper.addEventListener("click", () => {
+      console.log("[BillingToggle] wrapper click detected (fallback)");
+      setTimeout(() => updateVisibility("click+timeout"), 0);
+    });
+
+    input.dataset.listenerAttached = "true";
+    updateVisibility("initial");
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    const relevant = mutations.some(m =>
+      [...m.addedNodes, ...m.removedNodes].some(n =>
+        n.nodeType === 1 && (
+          n.matches?.(WRAPPER_SELECTOR) ||
+          n.querySelector?.(WRAPPER_SELECTOR) ||
+          n.matches?.(TARGET_SELECTOR) ||
+          n.querySelector?.(TARGET_SELECTOR)
+        )
+      )
+    );
+
+    if (relevant) {
+      console.log("[BillingToggle] Relevant DOM mutation observed");
+      attachListener();
+      updateVisibility("mutation-refresh");
+    }
+  });
+
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      console.log("[BillingToggle] DOMContentLoaded");
+      attachListener();
+    });
+  } else {
+    attachListener();
+  }
+})();
+</script>
