@@ -1,8 +1,5 @@
 <style>
-  /* =========================================================
-     DESKTOP ONLY (769px and above)
-     X-AXIS FLIP VERSION
-     ========================================================= */
+  /* Icon positioning */
   .accordion-toggle .minus,
   .accordion-toggle .plus {
     right: 0;
@@ -10,12 +7,11 @@
     transform: translateY(-50%);
   }
 
-  @media (min-width: 769px) {
-    .accordion-card {
-      position: relative;
-      perspective: 1200px;
-      height: 141px !important;
-    }
+  /* Flip container */
+  .accordion-card {
+    position: relative;
+    perspective: 1200px;
+    height: 141px !important;
   }
 
   .accordion-inner {
@@ -41,7 +37,7 @@
     transform: rotateX(180deg);
   }
 
-  /* Flip trigger (vertical) */
+  /* Flip trigger */
   .accordion-card.accordion-active .accordion-inner {
     transform: rotateX(180deg);
   }
@@ -54,7 +50,7 @@
     pointer-events: none;
   }
 
-  /* plus / minus visibility */
+  /* Plus / Minus visibility */
   .accordion-toggle.minus {
     display: none;
   }
@@ -71,35 +67,10 @@
   .accordion-toggle.minus {
     margin-top: auto;
   }
-
-  /* Hide minus icon on tablet */
-  @media (max-width: 1024px) {
-    .accordion-toggle.minus {
-      display: none !important;
-    }
-  }
-
-  /* =========================================================
-     MOBILE (Below 769px)
-     No flip behavior
-     ========================================================= */
-  @media (max-width: 768px) {
-    .accordion-inner {
-      height: auto !important;
-      transform: none !important;
-    }
-
-    .accordion-back {
-      position: relative;
-      transform: none !important;
-    }
-  }
 </style>
 
 <script>
   document.addEventListener("click", function (e) {
-    // Only run JS on desktop
-    if (window.innerWidth < 769) return;
 
     const plus = e.target.closest(".accordion-toggle.plus");
     if (plus) {
