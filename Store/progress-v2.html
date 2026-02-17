@@ -1,0 +1,153 @@
+<style>
+  .progress-bar-wrap {
+    position: absolute;
+    top: 0;
+    left: -10%;
+    width: 36px !important;
+  }
+  .num-bar {
+    position: absolute;
+    top: 50%;
+    left: 15%;
+  }
+</style>
+<script>
+  (function () {
+    if (window.__LF_ProgressSectionAnimInit_v3) return;
+    window.__LF_ProgressSectionAnimInit_v3 = true;
+
+    var SECTION_SELECTOR = ".progress-section";
+    var TARGET_SELECTOR = ".progress-bar, .num-bar, .check-fille, .chk-outline";
+
+    // Hysteresis: enter is harder than exit
+    var ENTER_RATIO = 0.35; // must be this visible to trigger ON
+    var EXIT_RATIO = 0.05; // must be this invisible to trigger OFF
+
+    var observedSections = new WeakSet();
+    var savedInline = new WeakMap();
+
+    function saveOnce(el) {
+      if (savedInline.has(el)) return;
+      savedInline.set(el, {
+        animation: el.style.animation,
+        animationName: el.style.animationName,
+        animationDuration: el.style.animationDuration,
+        animationDelay: el.style.animationDelay,
+        animationTimingFunction: el.style.animationTimingFunction,
+        animationIterationCount: el.style.animationIterationCount,
+        animationDirection: el.style.animationDirection,
+        animationFillMode: el.style.animationFillMode,
+        animationPlayState: el.style.animationPlayState,
+      });
+    }
+
+    function stopEl(el) {
+      saveOnce(el);
+      el.style.animation = "none";
+    }
+
+    function replayEl(el) {
+      saveOnce(el);
+
+      el.style.animation = "none";
+      void el.offsetWidth;
+
+      var s = savedInline.get(el);
+      var hadInline =
+        s &&
+        (s.animation ||
+          s.animationName ||
+          s.animationDuration ||
+          s.animationDelay ||
+          s.animationTimingFunction ||
+          s.animationIterationCount ||
+          s.animationFillMode ||
+          s.animationDirection ||
+          s.animationPlayState);
+
+      if (hadInline) {
+        el.style.animation = s.animation;
+        el.style.animationName = s.animationName;
+        el.style.animationDuration = s.animationDuration;
+        el.style.animationDelay = s.animationDelay;
+        el.style.animationTimingFunction = s.animationTimingFunction;
+        el.style.animationIterationCount = s.animationIterationCount;
+        el.style.animationDirection = s.animationDirection;
+        el.style.animationFillMode = s.animationFillMode;
+        el.style.animationPlayState = s.animationPlayState;
+      } else {
+        // no inline animation originally -> let your CSS control it
+        el.style.animation = "";
+      }
+    }
+
+    function stopAll(sectionEl) {
+      var els = sectionEl.querySelectorAll(TARGET_SELECTOR);
+      for (var i = 0; i < els.length; i++) stopEl(els[i]);
+    }
+
+    function replayAll(sectionEl) {
+      var els = sectionEl.querySelectorAll(TARGET_SELECTOR);
+      for (var i = 0; i < els.length; i++) replayEl(els[i]);
+    }
+
+    var io = new IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          var section = entry.target;
+
+          var state = section.dataset.lfInView === "1"; // current state (true=ON)
+          var r = entry.intersectionRatio;
+
+          if (!state && r >= ENTER_RATIO) {
+            section.dataset.lfInView = "1";
+            replayAll(section);
+          } else if (state && r <= EXIT_RATIO) {
+            section.dataset.lfInView = "0";
+            stopAll(section);
+          }
+        }
+      },
+      {
+        // multiple thresholds so we get callbacks across the range
+        threshold: [0, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1],
+        // optional: gives you a little breathing room at the bottom edge
+        rootMargin: "0px 0px -10% 0px",
+      },
+    );
+
+    function observeSections(root) {
+      var scope = root && root.querySelectorAll ? root : document;
+      var sections = scope.querySelectorAll(SECTION_SELECTOR);
+
+      for (var i = 0; i < sections.length; i++) {
+        var section = sections[i];
+        if (observedSections.has(section)) continue;
+
+        observedSections.add(section);
+        section.dataset.lfInView = "0";
+
+        // start with animations off until we clearly "enter"
+        stopAll(section);
+
+        io.observe(section);
+      }
+    }
+
+    observeSections(document);
+
+    // React/SPA friendly mounting
+    var mo = new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        var m = mutations[i];
+        for (var j = 0; j < m.addedNodes.length; j++) {
+          var node = m.addedNodes[j];
+          if (!node || node.nodeType !== 1) continue;
+          observeSections(node);
+        }
+      }
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+  })();
+</script>
