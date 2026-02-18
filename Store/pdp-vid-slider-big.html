@@ -59,7 +59,12 @@
         type: "progressbar",
         clickable: true,
       },
+      navigation: {
+        nextEl: ".pdp-slider-vid-big-next",
+        prevEl: ".pdp-slider-vid-big-prev",
+      },
       on: {
+        // Keep this if you still want to pause on slide change
         slideChangeTransitionStart() {
           document
             .querySelectorAll(".pdp-slider-vid-big video.lf-hls-video-big")
@@ -99,6 +104,9 @@
   const VIDEO_CLASS_BIG = "lf-hls-video-big";
   const PROCESSED_ATTR_BIG = "data-hls-processed-big";
   const BTN_SELECTOR_BIG = ".play-button-pdp";
+
+  // Track currently playing video (global within this script)
+  let currentPlayingBig = null;
 
   const logBig = (...a) => console.log("[LF-HLS-BIG]", ...a);
 
@@ -141,6 +149,18 @@
     btn.style.opacity = "0";
   }
 
+  function pauseOtherIfNeeded(video) {
+    // Pause only if there's another already-playing video
+    if (currentPlayingBig && currentPlayingBig !== video) {
+      try {
+        if (!currentPlayingBig.paused && !currentPlayingBig.ended) {
+          logBig("Pausing previous playing video");
+          currentPlayingBig.pause();
+        }
+      } catch (e) {}
+    }
+  }
+
   function wirePlayButtonBig(slide, video) {
     const btn = slide.querySelector(BTN_SELECTOR_BIG);
 
@@ -151,12 +171,24 @@
     if (video.dataset.btnWiredBig === "1") return;
     video.dataset.btnWiredBig = "1";
 
+    const playWithExclusivity = async () => {
+      pauseOtherIfNeeded(video);
+      try {
+        await video.play();
+      } catch (e) {
+        logBig("play failed", e);
+      }
+    };
+
     const toggle = async () => {
       try {
-        if (video.paused || video.ended) await video.play();
-        else video.pause();
+        if (video.paused || video.ended) {
+          await playWithExclusivity();
+        } else {
+          video.pause();
+        }
       } catch (e) {
-        logBig("play/pause failed", e);
+        logBig("toggle failed", e);
       }
     };
 
@@ -179,19 +211,29 @@
       video.dataset.videoClickAttachedBig = "1";
     }
 
+    // If play happens via any route, enforce exclusivity too
+    // (e.g., native controls play, programmatic play, etc.)
     video.addEventListener("play", () => {
-      hideBtnBig(btn);
+      pauseOtherIfNeeded(video);
+      currentPlayingBig = video;
+
+      hideBtnBig(slide.querySelector(BTN_SELECTOR_BIG));
       setControlsVisibleBig(video, true);
     });
 
     video.addEventListener("pause", () => {
-      showBtnBig(btn);
+      showBtnBig(slide.querySelector(BTN_SELECTOR_BIG));
       setControlsVisibleBig(video, false);
+
+      // If the currently tracked one got paused, clear it
+      if (currentPlayingBig === video) currentPlayingBig = null;
     });
 
     video.addEventListener("ended", () => {
-      showBtnBig(btn);
+      showBtnBig(slide.querySelector(BTN_SELECTOR_BIG));
       setControlsVisibleBig(video, false);
+
+      if (currentPlayingBig === video) currentPlayingBig = null;
     });
 
     const refreshUI = () => {
@@ -288,9 +330,7 @@
       logBig("Found Cloudflare iframe in slide", { videoId, src, hls });
 
       iframe.style.display = "none";
-
       ensureVideoInSlideBig(slide, hls, videoId);
-
       iframe.remove();
     });
   }

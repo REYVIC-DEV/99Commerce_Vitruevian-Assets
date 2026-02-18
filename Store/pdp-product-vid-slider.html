@@ -103,252 +103,264 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
 <script>
-  (() => {
-    const SLIDE_SELECTOR = ".pdp-slider-vid .swiper-slide";
-    const IFRAME_SELECTOR = "iframe";
-    const VIDEO_CLASS = "lf-hls-video";
-    const PROCESSED_ATTR = "data-hls-processed";
-    const BTN_SELECTOR = ".play-button-pdp";
+(() => {
+  const SLIDE_SELECTOR = ".pdp-slider-vid .swiper-slide";
+  const IFRAME_SELECTOR = "iframe";
+  const VIDEO_CLASS = "lf-hls-video";
+  const PROCESSED_ATTR = "data-hls-processed";
+  const BTN_SELECTOR = ".play-button-pdp";
 
-    const log = (...a) => console.log("[LF-HLS]", ...a);
+  // Track currently playing video (within this slider)
+  let currentPlaying = null;
 
-    function isCloudflareStreamIframe(urlStr) {
-      try {
-        const u = new URL(urlStr);
-        return (
-          u.hostname.endsWith("cloudflarestream.com") &&
-          u.pathname.includes("/iframe")
-        );
-      } catch {
-        return false;
-      }
-    }
+  const log = (...a) => console.log("[LF-HLS]", ...a);
 
-    function cloudflareToHls(urlStr) {
+  function isCloudflareStreamIframe(urlStr) {
+    try {
       const u = new URL(urlStr);
-      const parts = u.pathname.split("/").filter(Boolean); // /<videoId>/iframe
-      const videoId = parts[0];
-      return { videoId, hls: `${u.origin}/${videoId}/manifest/video.m3u8` };
-    }
-
-    function setControlsVisible(video, visible) {
-      // boolean attribute: controls present => visible, removed => hidden
-      if (visible) video.setAttribute("controls", "");
-      else video.removeAttribute("controls");
-    }
-
-    function showBtn(btn) {
-      if (!btn) return;
-      btn.hidden = false;
-      btn.style.display = ""; // allow CSS to control
-      btn.style.pointerEvents = "auto";
-      btn.style.opacity = "1";
-    }
-
-    function hideBtn(btn) {
-      if (!btn) return;
-      btn.hidden = true;
-      btn.style.pointerEvents = "none";
-      btn.style.opacity = "0";
-    }
-
-    function wirePlayButton(slide, video) {
-      const btn = slide.querySelector(BTN_SELECTOR);
-
-      // Ensure initial UI state (paused)
-      setControlsVisible(video, false);
-      showBtn(btn);
-
-      // Avoid attaching multiple listeners if React re-renders
-      if (video.dataset.btnWired === "1") return;
-      video.dataset.btnWired = "1";
-
-      const toggle = async () => {
-        // If the video is in a clone slide (loop), it still works; play() needs user gesture
-        try {
-          if (video.paused || video.ended) {
-            await video.play();
-          } else {
-            video.pause();
-          }
-        } catch (e) {
-          log("play/pause failed (autoplay policy?)", e);
-        }
-      };
-
-      if (btn && btn.dataset.listenerAttached !== "1") {
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          toggle();
-        });
-        btn.dataset.listenerAttached = "1";
-      }
-
-      // Optional: clicking video toggles too (ONLY when paused / controls hidden)
-      if (video.dataset.videoClickAttached !== "1") {
-        video.addEventListener("click", (e) => {
-          // If controls are visible (playing state), don't toggle.
-          // This prevents the "pause then instantly play again" behavior.
-          const controlsVisible = video.hasAttribute("controls");
-          if (controlsVisible) return;
-
-          toggle();
-        });
-        video.dataset.videoClickAttached = "1";
-      }
-
-      // Update UI based on playback state
-      video.addEventListener("play", () => {
-        hideBtn(btn);
-        setControlsVisible(video, true); // show controls while playing
-      });
-
-      video.addEventListener("pause", () => {
-        // If pause fires because it ended, ended handler will run too; safe to show
-        showBtn(btn);
-        setControlsVisible(video, false); // hide controls when paused
-      });
-
-      video.addEventListener("ended", () => {
-        showBtn(btn);
-        setControlsVisible(video, false);
-      });
-
-      // If the slide DOM is replaced, we may get a new btn node; refresh UI
-      // (also handles case where btn didn't exist at initial wiring but appears later)
-      const refreshUI = () => {
-        const freshBtn = slide.querySelector(BTN_SELECTOR);
-        if (video.paused || video.ended) {
-          setControlsVisible(video, false);
-          showBtn(freshBtn);
-        } else {
-          setControlsVisible(video, true);
-          hideBtn(freshBtn);
-        }
-      };
-
-      // Light refresh on mutation inside slide
-      const localObs = new MutationObserver(() => refreshUI());
-      localObs.observe(slide, { childList: true, subtree: true });
-      video._btnObserver = localObs;
-
-      refreshUI();
-    }
-
-    function initHls(videoEl, hlsUrl, videoId) {
-      const canNative =
-        videoEl.canPlayType("application/vnd.apple.mpegurl") ||
-        videoEl.canPlayType("application/x-mpegURL");
-
-      log("Init video", { videoId, hlsUrl, nativeHls: !!canNative });
-
-      if (canNative) {
-        videoEl.src = hlsUrl;
-        return;
-      }
-
-      if (!window.Hls || !window.Hls.isSupported()) {
-        log("Hls.js not supported in this browser.", videoEl);
-        return;
-      }
-
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-      });
-
-      hls.loadSource(hlsUrl);
-      hls.attachMedia(videoEl);
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        log("HLS error", { videoId, event, data });
-      });
-
-      videoEl._hlsInstance = hls;
-    }
-
-    function ensureVideoInSlide(slide, hlsUrl, videoId) {
-      if (slide.getAttribute(PROCESSED_ATTR) === "1") return;
-
-      let video = slide.querySelector(`video.${VIDEO_CLASS}`);
-      if (!video) {
-        video = document.createElement("video");
-        video.className = VIDEO_CLASS;
-        video.setAttribute("playsinline", "");
-        video.setAttribute("preload", "metadata");
-        video.muted = false; // keep sound; set true if you plan autoplay
-        video.style.width = "100%";
-        video.style.height = "100%";
-        slide.prepend(video);
-      }
-
-      // Always start with controls hidden (your rule)
-      setControlsVisible(video, false);
-
-      initHls(video, hlsUrl, videoId);
-      wirePlayButton(slide, video);
-
-      slide.setAttribute(PROCESSED_ATTR, "1");
-    }
-
-    function processSlides(root = document) {
-      const slides = root.querySelectorAll(SLIDE_SELECTOR);
-      if (!slides.length) return;
-
-      slides.forEach((slide) => {
-        if (slide.getAttribute(PROCESSED_ATTR) === "1") {
-          // Still ensure wiring in case play button got re-rendered
-          const video = slide.querySelector(`video.${VIDEO_CLASS}`);
-          if (video) wirePlayButton(slide, video);
-          return;
-        }
-
-        const iframe = slide.querySelector(IFRAME_SELECTOR);
-        if (!iframe) return;
-
-        const src = iframe.getAttribute("src") || "";
-        if (!isCloudflareStreamIframe(src)) return;
-
-        const { videoId, hls } = cloudflareToHls(src);
-        log("Found Cloudflare iframe in slide", { videoId, src, hls });
-
-        // stop iframe from loading/painting
-        iframe.style.display = "none";
-
-        ensureVideoInSlide(slide, hls, videoId);
-
-        // remove iframe to avoid double network + focus issues
-        iframe.remove();
-      });
-    }
-
-    // Initial
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => processSlides());
-    } else {
-      processSlides();
-    }
-
-    // Observe for LF/React rerender
-    const obs = new MutationObserver((mutations) => {
-      const relevant = mutations.some((m) =>
-        [...m.addedNodes].some(
-          (n) =>
-            n.nodeType === 1 &&
-            (n.matches?.(SLIDE_SELECTOR) ||
-              n.querySelector?.(SLIDE_SELECTOR) ||
-              n.matches?.("iframe") ||
-              n.querySelector?.("iframe") ||
-              n.matches?.(BTN_SELECTOR) ||
-              n.querySelector?.(BTN_SELECTOR)),
-        ),
+      return (
+        u.hostname.endsWith("cloudflarestream.com") &&
+        u.pathname.includes("/iframe")
       );
-      if (relevant) processSlides();
+    } catch {
+      return false;
+    }
+  }
+
+  function cloudflareToHls(urlStr) {
+    const u = new URL(urlStr);
+    const parts = u.pathname.split("/").filter(Boolean); // /<videoId>/iframe
+    const videoId = parts[0];
+    return { videoId, hls: `${u.origin}/${videoId}/manifest/video.m3u8` };
+  }
+
+  function setControlsVisible(video, visible) {
+    if (visible) video.setAttribute("controls", "");
+    else video.removeAttribute("controls");
+  }
+
+  function showBtn(btn) {
+    if (!btn) return;
+    btn.hidden = false;
+    btn.style.display = "";
+    btn.style.pointerEvents = "auto";
+    btn.style.opacity = "1";
+  }
+
+  function hideBtn(btn) {
+    if (!btn) return;
+    btn.hidden = true;
+    btn.style.pointerEvents = "none";
+    btn.style.opacity = "0";
+  }
+
+  function pauseOtherIfNeeded(video) {
+    if (currentPlaying && currentPlaying !== video) {
+      try {
+        if (!currentPlaying.paused && !currentPlaying.ended) {
+          log("Pausing previous playing video");
+          currentPlaying.pause();
+        }
+      } catch (e) {}
+    }
+  }
+
+  function wirePlayButton(slide, video) {
+    const btn = slide.querySelector(BTN_SELECTOR);
+
+    // Initial UI (paused)
+    setControlsVisible(video, false);
+    showBtn(btn);
+
+    if (video.dataset.btnWired === "1") return;
+    video.dataset.btnWired = "1";
+
+    const playWithExclusivity = async () => {
+      pauseOtherIfNeeded(video);
+      try {
+        await video.play();
+      } catch (e) {
+        log("play failed (gesture/autoplay?)", e);
+      }
+    };
+
+    const toggle = async () => {
+      try {
+        if (video.paused || video.ended) {
+          await playWithExclusivity();
+        } else {
+          video.pause();
+        }
+      } catch (e) {
+        log("toggle failed", e);
+      }
+    };
+
+    if (btn && btn.dataset.listenerAttached !== "1") {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle();
+      });
+      btn.dataset.listenerAttached = "1";
+    }
+
+    // Click-to-play only when paused (controls hidden)
+    if (video.dataset.videoClickAttached !== "1") {
+      video.addEventListener("click", () => {
+        const controlsVisible = video.hasAttribute("controls");
+        if (controlsVisible) return;
+        toggle();
+      });
+      video.dataset.videoClickAttached = "1";
+    }
+
+    // Enforce exclusivity even if play happens via native controls
+    video.addEventListener("play", () => {
+      pauseOtherIfNeeded(video);
+      currentPlaying = video;
+
+      hideBtn(slide.querySelector(BTN_SELECTOR));
+      setControlsVisible(video, true);
     });
 
-    obs.observe(document.documentElement, { childList: true, subtree: true });
+    video.addEventListener("pause", () => {
+      showBtn(slide.querySelector(BTN_SELECTOR));
+      setControlsVisible(video, false);
 
-    log("Observer attached");
-  })();
+      if (currentPlaying === video) currentPlaying = null;
+    });
+
+    video.addEventListener("ended", () => {
+      showBtn(slide.querySelector(BTN_SELECTOR));
+      setControlsVisible(video, false);
+
+      if (currentPlaying === video) currentPlaying = null;
+    });
+
+    const refreshUI = () => {
+      const freshBtn = slide.querySelector(BTN_SELECTOR);
+      if (video.paused || video.ended) {
+        setControlsVisible(video, false);
+        showBtn(freshBtn);
+      } else {
+        setControlsVisible(video, true);
+        hideBtn(freshBtn);
+      }
+    };
+
+    const localObs = new MutationObserver(() => refreshUI());
+    localObs.observe(slide, { childList: true, subtree: true });
+    video._btnObserver = localObs;
+
+    refreshUI();
+  }
+
+  function initHls(videoEl, hlsUrl, videoId) {
+    const canNative =
+      videoEl.canPlayType("application/vnd.apple.mpegurl") ||
+      videoEl.canPlayType("application/x-mpegURL");
+
+    log("Init video", { videoId, hlsUrl, nativeHls: !!canNative });
+
+    if (canNative) {
+      videoEl.src = hlsUrl;
+      return;
+    }
+
+    if (!window.Hls || !window.Hls.isSupported()) {
+      log("Hls.js not supported in this browser.", videoEl);
+      return;
+    }
+
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+    });
+
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(videoEl);
+
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      log("HLS error", { videoId, event, data });
+    });
+
+    videoEl._hlsInstance = hls;
+  }
+
+  function ensureVideoInSlide(slide, hlsUrl, videoId) {
+    if (slide.getAttribute(PROCESSED_ATTR) === "1") return;
+
+    let video = slide.querySelector(`video.${VIDEO_CLASS}`);
+    if (!video) {
+      video = document.createElement("video");
+      video.className = VIDEO_CLASS;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("preload", "metadata");
+      video.muted = false;
+      video.style.width = "100%";
+      video.style.height = "100%";
+      slide.prepend(video);
+    }
+
+    setControlsVisible(video, false);
+
+    initHls(video, hlsUrl, videoId);
+    wirePlayButton(slide, video);
+
+    slide.setAttribute(PROCESSED_ATTR, "1");
+  }
+
+  function processSlides(root = document) {
+    const slides = root.querySelectorAll(SLIDE_SELECTOR);
+    if (!slides.length) return;
+
+    slides.forEach((slide) => {
+      if (slide.getAttribute(PROCESSED_ATTR) === "1") {
+        const video = slide.querySelector(`video.${VIDEO_CLASS}`);
+        if (video) wirePlayButton(slide, video);
+        return;
+      }
+
+      const iframe = slide.querySelector(IFRAME_SELECTOR);
+      if (!iframe) return;
+
+      const src = iframe.getAttribute("src") || "";
+      if (!isCloudflareStreamIframe(src)) return;
+
+      const { videoId, hls } = cloudflareToHls(src);
+      log("Found Cloudflare iframe in slide", { videoId, src, hls });
+
+      iframe.style.display = "none";
+      ensureVideoInSlide(slide, hls, videoId);
+      iframe.remove();
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => processSlides());
+  } else {
+    processSlides();
+  }
+
+  const obs = new MutationObserver((mutations) => {
+    const relevant = mutations.some((m) =>
+      [...m.addedNodes].some(
+        (n) =>
+          n.nodeType === 1 &&
+          (n.matches?.(SLIDE_SELECTOR) ||
+            n.querySelector?.(SLIDE_SELECTOR) ||
+            n.matches?.("iframe") ||
+            n.querySelector?.("iframe") ||
+            n.matches?.(BTN_SELECTOR) ||
+            n.querySelector?.(BTN_SELECTOR))
+      )
+    );
+    if (relevant) processSlides();
+  });
+
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+
+  log("Observer attached");
+})();
 </script>
