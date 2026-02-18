@@ -1,0 +1,42 @@
+<style>
+.four-clinic-slider .swiper-slide {
+  width: 270px !important;
+}
+</style>
+<script>
+  function initFourClinicSlider() {
+    const el = document.querySelector(".four-clinic-slider");
+    if (!el || el.classList.contains("swiper-initialized")) return;
+
+    new Swiper(el, {
+      speed: 400,
+      spaceBetween: 24,
+      slidesPerView: "auto",
+      watchOverflow: true,
+      loop: true,
+      centerInsufficientSlides: true,
+      centeredSlidesBounds: true,
+      observer: true,
+      observeParents: true,
+      navigation: {
+        nextEl: '.four-clinic-slider-next',
+        prevEl: '.four-clinic-slider-prev',
+      },
+    });
+  }
+
+  // Run once
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(initFourClinicSlider, 300);
+  });
+
+  // Run again if DOM changes (Lightfunnels re-render)
+  const fourClinicSliderObserver = new MutationObserver(function () {
+    initFourClinicSlider();
+  });
+
+  fourClinicSliderObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+</script>
