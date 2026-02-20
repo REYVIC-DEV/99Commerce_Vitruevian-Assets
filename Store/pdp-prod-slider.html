@@ -1,0 +1,74 @@
+<style>
+  .pdp-img-slider .swiper-slide img {
+    pointer-events: none !important;
+  }
+
+  .pdp-img-slider-thumb .swiper-slide {
+    cursor: pointer;
+  }
+
+  .pdp-img-slider-thumb .swiper-slide-thumb-active {
+    border: 2px solid #009370;
+  }
+</style>
+
+<script>
+(function () {
+  let scheduled = false;
+
+  function initSliders() {
+    scheduled = false;
+
+    const mainEl = document.querySelector(".pdp-img-slider");
+    const thumbEl = document.querySelector(".pdp-img-slider-thumb");
+
+    if (!mainEl || !thumbEl) return;
+    if (!window.Swiper) return;
+
+    if (mainEl.swiper || thumbEl.swiper) return;
+
+    const thumbSwiper = new Swiper(thumbEl, {
+      spaceBetween: 6,
+      slidesPerView: 'auto',
+      freeMode: true,
+      watchSlidesProgress: true,
+      observer: true,
+      observeParents: true,
+      navigation: {
+        nextEl: '.swiper-button-next',
+        prevEl: '.swiper-button-prev',
+      },
+    });
+
+    new Swiper(mainEl, {
+      speed: 400,
+      spaceBetween: 0,
+      slidesPerView: 1,
+      loop: true,
+      observer: true,
+      observeParents: true,
+      thumbs: {
+        swiper: thumbSwiper,
+      },
+    });
+  }
+
+  function queueInit() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(initSliders);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", queueInit);
+  } else {
+    queueInit();
+  }
+
+  const observer = new MutationObserver(queueInit);
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+})();
+</script>
