@@ -202,14 +202,25 @@
     }
 
     // Click-to-play only when paused (controls hidden)
-    if (video.dataset.videoClickAttachedBig !== "1") {
-      video.addEventListener("click", () => {
-        const controlsVisible = video.hasAttribute("controls");
-        if (controlsVisible) return;
-        toggle();
-      });
-      video.dataset.videoClickAttachedBig = "1";
-    }
+// Click-to-play only when paused (controls hidden) — and never steal clicks meant for controls
+if (video.dataset.videoClickAttachedBig !== "1") {
+  video.addEventListener(
+    "click",
+    (e) => {
+      // only left click / primary pointer
+      if (e.button != null && e.button !== 0) return;
+
+      // If controls are visible, don't toggle on click.
+      // (Prevents breaking fullscreen/seek/volume)
+      if (video.hasAttribute("controls")) return;
+
+      toggle();
+    },
+    true, // capture helps avoid weird bubbling behavior in some browsers
+  );
+
+  video.dataset.videoClickAttachedBig = "1";
+}
 
     // If play happens via any route, enforce exclusivity too
     // (e.g., native controls play, programmatic play, etc.)
