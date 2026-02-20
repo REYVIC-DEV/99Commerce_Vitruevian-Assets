@@ -1,0 +1,168 @@
+<style>
+  /* hide native radio UI */
+  [data-lf-hide="radio"] { display: none !important; }
+
+  [data-lf-processed="1"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* icon */
+  [data-lf-icon]{
+    height: 57px;
+    display: inline-block;
+    margin-right: 10px;
+    flex: 0 0 auto;
+    max-width: 74px;
+  }
+
+  /* title column */
+  [data-lf-titlewrap]{
+    display: flex;
+    flex-direction: column;
+    color: #000000;
+  }
+  [data-lf-title]{
+    line-height: 21px !important;
+    letter-spacing: 0% !important;
+    font-size: 15.3px !important;
+    font-weight: 700 !important;
+  }
+  [data-lf-subtitle]{
+    margin-top: 5.5px !important;
+    font-size: 15.2px !important;
+    line-height: 21px !important;
+    font-weight: 400 !important;
+  }
+
+  @media (max-width: 425px) {
+    [data-lf-titlewrap]{
+        max-width: 145px !important;
+    }
+    [data-lf-title],[data-lf-subtitle]{
+        font-size: 12px !important;    
+    }
+    [data-lf-title]{
+        line-height: 19px !important;
+    }
+    [data-lf-subtitle]{
+        line-height: 17px !important;
+        margin-top: 4px !important;
+    }
+  }
+</style>
+
+<script>
+(function () {
+
+  /* 🔹 Add any bundle container IDs here */
+  const BUNDLE_ROOTS = [
+    "the-bundles",
+    "the-bundles-2"
+  ];
+
+  const ICONS = {
+    "1-Person Protocol Bag":
+      "https://assets.lightfunnels.com/account-90380/images_library/64a8f9d1-eb12-40b5-b197-7b590bdb20de.430250701640ec432ae870fc1363bd81a46c6215.png",
+    "2-Person Home Protocol Bundle":
+      "https://assets.lightfunnels.com/account-90380/images_library/3fe63436-309b-496e-ab1e-4c29a98b8b0c.523660691170cf7b9214f4273353e8d125b824f2.png",
+    "Family Bundle":
+      "https://assets.lightfunnels.com/account-90380/images_library/8ed3c2a1-8784-46fa-b47f-1d7bec08fcd3.d5c637c0a6a77c80c7598ef39234562b68aca27b.png",
+  };
+
+  const SUBTITLES = {
+    "1-Person Protocol Bag": "2 Parasite Reset Protocols for 1 person.",
+    "2-Person Home Protocol Bundle": "2 full protocols each for 2 adults.",
+    "Family Bundle": "Up to 6 full parasite protocols per household.",
+  };
+
+  function norm(s){
+    return (s || "")
+      .replace(/\u2011|\u2013|\u2014/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function enhanceContainer(container){
+    if (!container) return;
+
+    const titleSpans = container.querySelectorAll("span.n0NQf");
+
+    titleSpans.forEach((titleSpan) => {
+
+      const row = titleSpan.parentElement;
+      if (!row) return;
+
+      if (row.dataset.lfProcessed === "1") return;
+
+      const titleText = norm(titleSpan.textContent);
+      const iconSrc = ICONS[titleText];
+      const subtitleText = SUBTITLES[titleText] || "";
+
+      row.dataset.lfProcessed = "1";
+
+      /* Hide native radio */
+      const prev = titleSpan.previousElementSibling;
+      if (prev) prev.setAttribute("data-lf-hide", "radio");
+
+      /* Insert icon */
+      if (iconSrc) {
+        const img = document.createElement("img");
+        img.setAttribute("data-lf-icon", "1");
+        img.src = iconSrc;
+        img.alt = titleText + " icon";
+        row.insertBefore(img, titleSpan);
+      }
+
+      /* Create title column */
+      const wrap = document.createElement("div");
+      wrap.setAttribute("data-lf-titlewrap", "1");
+
+      const t = document.createElement("span");
+      t.setAttribute("data-lf-title", "1");
+      t.textContent = titleText;
+
+      const s = document.createElement("span");
+      s.setAttribute("data-lf-subtitle", "1");
+      s.textContent = subtitleText;
+
+      wrap.appendChild(t);
+      wrap.appendChild(s);
+
+      titleSpan.replaceWith(wrap);
+
+      /* Ensure horizontal layout */
+      const cs = window.getComputedStyle(row);
+      if (cs.display !== "flex") {
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+      }
+    });
+  }
+
+  function enhanceAll(){
+    BUNDLE_ROOTS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) enhanceContainer(el);
+    });
+  }
+
+  function schedule(){
+    clearTimeout(window.__lfBundlesTO);
+    window.__lfBundlesTO = setTimeout(enhanceAll, 50);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", schedule);
+  } else {
+    schedule();
+  }
+
+  const observer = new MutationObserver(schedule);
+
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true
+  });
+
+})();
+</script>
