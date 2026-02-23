@@ -1,0 +1,52 @@
+<script>
+(function () {
+  const TARGET_SELECTOR = ".shipping-protection input[type='checkbox']";
+  const STORAGE_KEY = "lf_shipping_protection_choice"; // "1" checked, "0" unchecked
+
+  function getChoice() {
+    const v = localStorage.getItem(STORAGE_KEY);
+    return (v === "1" || v === "0") ? v : null;
+  }
+
+  function setChoiceFromTarget(target) {
+    localStorage.setItem(STORAGE_KEY, target.checked ? "1" : "0");
+  }
+
+  function syncTargetToStorage(target, choice01) {
+    // In your LF setup, pricing/state changes reliably via click on the real checkbox
+    const wantChecked = choice01 === "1";
+    if (target.checked !== wantChecked) {
+      target.click();
+    }
+  }
+
+  function bind() {
+    const target = document.querySelector(TARGET_SELECTOR);
+    if (!target) return;
+
+    if (target.dataset.lfStorageSyncAttached === "1") return;
+    target.dataset.lfStorageSyncAttached = "1";
+
+    const stored = getChoice();
+
+    if (stored === null) {
+      // No storage yet -> initialize storage from actual checkbox state
+      setChoiceFromTarget(target);
+    } else {
+      // Storage exists -> ensure checkbox matches storage
+      syncTargetToStorage(target, stored);
+    }
+
+    // Keep storage updated when the real checkbox changes (user click or programmatic)
+    target.addEventListener("change", function () {
+      setChoiceFromTarget(target);
+    });
+  }
+
+  bind();
+
+  // Re-bind after LF/React re-renders
+  const mo = new MutationObserver(bind);
+  mo.observe(document.body, { childList: true, subtree: true });
+})();
+</script>

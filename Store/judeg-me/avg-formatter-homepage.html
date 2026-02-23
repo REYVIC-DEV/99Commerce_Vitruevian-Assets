@@ -1,0 +1,130 @@
+<style>
+/* Layout */
+.lf-jdgm-all-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+/* Keep Judge.me stars intact */
+.lf-jdgm-all-inline .jdgm-all-reviews-rating__stars {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Text layout */
+.lf-jdgm-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 400; /* default regular */
+}
+
+/* Only this part bold */
+.lf-rating-strong {
+  font-weight: 700;
+}
+
+/* Separator styling */
+.lf-sep {
+  opacity: .6;
+}
+
+/* Mobile */
+@media (max-width:480px){
+  .lf-jdgm-all-inline{
+    flex-wrap: wrap;
+    white-space: normal;
+    row-gap: 4px;
+    font-size:14.4px;
+    line-height:17.48px;
+  }
+}
+
+.reverse-hp .lf-jdgm-all-inline, .reverse-hp.lf-jdgm-text{
+  display: flex !important;
+  flex-direction: row-reverse !important;
+}
+
+</style>
+
+<script>
+(function () {
+
+  const ROOT_SEL = ".jdgm-all-reviews-text";
+  const BUILT_ATTR = "data-lf-built";
+
+  function formatTrusted(n) {
+    if (!Number.isFinite(n)) return "";
+    if (n < 1000) return n;
+
+    const rounded = Math.floor(n / 1000) * 1000;
+    return new Intl.NumberFormat().format(rounded) + "+";
+  }
+
+  function buildOne(root) {
+    if (!root || root.getAttribute(BUILT_ATTR) === "1") return;
+
+    const a = root.querySelector("a");
+    if (!a) return;
+
+    const ratingEl = root.querySelector(".jdgm-all-reviews-rating[data-score]");
+    const textEl = root.querySelector(".jdgm-all-reviews-text__text[data-score]");
+
+    const score =
+      parseFloat(ratingEl?.dataset.score || "") ||
+      parseFloat(textEl?.dataset.score || "");
+
+    if (!Number.isFinite(score)) return;
+
+    const reviews = parseInt(textEl?.dataset.numberOfReviews || "", 10);
+
+    const roundedScore = (Math.round(score * 10) / 10).toFixed(1);
+    const trusted = formatTrusted(reviews);
+
+    // Clone entire rating block (keeps star CSS working)
+    let ratingBlock = root.querySelector(".jdgm-all-reviews-rating");
+    if (ratingBlock) ratingBlock = ratingBlock.cloneNode(true);
+
+    // Remove score inside star block (we print our own)
+    if (ratingBlock) {
+      const scoreInside = ratingBlock.querySelector(".jdgm-all-reviews-rating__score");
+      if (scoreInside) scoreInside.remove();
+    }
+
+    // Replace everything inside <a>
+    a.innerHTML = "";
+
+    const wrap = document.createElement("span");
+    wrap.className = "lf-jdgm-all-inline";
+
+    if (ratingBlock) wrap.appendChild(ratingBlock);
+
+    const text = document.createElement("span");
+    text.className = "lf-jdgm-text";
+    text.innerHTML = `
+      <span class="lf-rating-strong">Rated ${roundedScore} / 5</span>
+      <span class="lf-sep">|</span>
+      <span>Trusted By ${trusted}</span>
+    `;
+
+    wrap.appendChild(text);
+    a.appendChild(wrap);
+
+    root.setAttribute(BUILT_ATTR, "1");
+  }
+
+  function buildAll() {
+    document.querySelectorAll(ROOT_SEL).forEach(buildOne);
+  }
+
+  // Initial run
+  buildAll();
+
+  // React / Judge.me async safety
+  const obs = new MutationObserver(buildAll);
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+
+})();
+</script>
