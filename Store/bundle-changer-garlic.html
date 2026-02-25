@@ -1,4 +1,8 @@
 <style>
+  #the-bundles .active,
+  #the-bundles-2 .active{
+    background: #FEECED !important;
+  }
   /* hide native radio UI */
   [data-lf-hide="radio"] { display: none !important; }
 
@@ -21,12 +25,37 @@
     flex-direction: column;
     color: #000000;
   }
+
+  /* NEW: title row = title + badge */
+  [data-lf-title-row]{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
   [data-lf-title]{
     line-height: 21px !important;
     letter-spacing: 0% !important;
     font-size: 15.3px !important;
     font-weight: 700 !important;
   }
+
+  /* NEW: percent-off badge (pink/red variant) */
+  [data-lf-percent-off]{
+    background: #FFD3D6;
+    color: #A03F3F;
+    border-radius: 2.07px;
+    height: 17px;
+    padding: 0 5.5px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 17px;
+    font-weight: 700;
+  }
+
   [data-lf-subtitle]{
     margin-top: 5.5px !important;
     font-size: 15.2px !important;
@@ -36,17 +65,23 @@
 
   @media (max-width: 425px) {
     [data-lf-titlewrap]{
-        max-width: 145px !important;
+      max-width: 145px !important;
     }
     [data-lf-title],[data-lf-subtitle]{
-        font-size: 12px !important;    
+      font-size: 12px !important;
     }
     [data-lf-title]{
-        line-height: 19px !important;
+      line-height: 19px !important;
     }
     [data-lf-subtitle]{
-        line-height: 17px !important;
-        margin-top: 4px !important;
+      line-height: 17px !important;
+      margin-top: 4px !important;
+    }
+    [data-lf-percent-off]{
+      font-size: 10.5px;
+      height: 16px;
+      line-height: 16px;
+      padding: 0 5px;
     }
   }
 </style>
@@ -61,21 +96,25 @@
   ];
 
   const ICONS = {
-    "1-Person Protocol Bag":
+    "Buy 1":
       "https://assets.lightfunnels.com/account-90380/images_library/91df25f3-160e-41b8-a862-5047c695cd72.b094ee33cd3abe3f46504721fc624c2cbccc5b30.png",
-    "2-Person Home Protocol Bundle":
+    "Buy 2 Get 1 Free":
       "https://assets.lightfunnels.com/account-90380/images_library/44bc24d3-24fe-45b2-a3bb-0be1343e8f4d.90a1ac3df8b854821642a6df3c159cca49d5600a.png",
-    "Family Bundle":
-      "https://assets.lightfunnels.com/account-90380/images_library/2452f68a-9267-479f-bccc-c8f4f2729061.0e37714597fb4efda1fdc823e919b969887fc37a.png",
-    "Family / Protocol Vault Bundle":
+    "Buy 3 Get 2 Free":
       "https://assets.lightfunnels.com/account-90380/images_library/2452f68a-9267-479f-bccc-c8f4f2729061.0e37714597fb4efda1fdc823e919b969887fc37a.png",
   };
 
   const SUBTITLES = {
-    "1-Person Protocol Bag": "2 Parasite Reset Protocols for 1 person.",
-    "2-Person Home Protocol Bundle": "2 full protocols each for 2 adults.",
-    "Family Bundle": "Up to 6 full parasite protocols per household.",
-    "Family / Protocol Vault Bundle": "Up to 6 full parasite protocols per household.",
+    "Buy 1": "75 day supply",
+    "Buy 2 Get 1 Free": "225 day supply", 
+    "Buy 3 Get 2 Free": "375 day supply",
+  };
+
+  /* NEW: badge text per title (leave "" to hide for that bundle) */
+  const BADGES = {
+    "Buy 1": "30% OFF",
+    "Buy 2 Get 1 Free": "37% OFF",
+    "Buy 3 Get 2 Free": "42% OFF",
   };
 
   function norm(s){
@@ -91,7 +130,6 @@
     const titleSpans = container.querySelectorAll("span.n0NQf");
 
     titleSpans.forEach((titleSpan) => {
-
       const row = titleSpan.parentElement;
       if (!row) return;
 
@@ -100,6 +138,7 @@
       const titleText = norm(titleSpan.textContent);
       const iconSrc = ICONS[titleText];
       const subtitleText = SUBTITLES[titleText] || "";
+      const badgeText = (BADGES[titleText] || "").trim();
 
       row.dataset.lfProcessed = "1";
 
@@ -120,15 +159,27 @@
       const wrap = document.createElement("div");
       wrap.setAttribute("data-lf-titlewrap", "1");
 
+      /* Title row */
+      const titleRow = document.createElement("div");
+      titleRow.setAttribute("data-lf-title-row", "1");
+
       const t = document.createElement("span");
       t.setAttribute("data-lf-title", "1");
       t.textContent = titleText;
+      titleRow.appendChild(t);
+
+      if (badgeText) {
+        const b = document.createElement("span");
+        b.setAttribute("data-lf-percent-off", "1");
+        b.textContent = badgeText;
+        titleRow.appendChild(b);
+      }
 
       const s = document.createElement("span");
       s.setAttribute("data-lf-subtitle", "1");
       s.textContent = subtitleText;
 
-      wrap.appendChild(t);
+      wrap.appendChild(titleRow);
       wrap.appendChild(s);
 
       titleSpan.replaceWith(wrap);
