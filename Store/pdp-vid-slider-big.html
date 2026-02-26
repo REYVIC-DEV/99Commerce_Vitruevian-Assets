@@ -93,7 +93,6 @@
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-
 <script>
 (() => {
   // =========================
@@ -105,10 +104,36 @@
   const PROCESSED_ATTR_BIG = "data-hls-processed-big";
   const BTN_SELECTOR_BIG = ".play-button-pdp";
 
+  const PRECONNECT_ATTR_BIG = "data-lf-preconnect-cfstream-big";
+
   // Track currently playing video (global within this script)
   let currentPlayingBig = null;
 
   const logBig = (...a) => console.log("[LF-HLS-BIG]", ...a);
+
+  function ensurePreconnectBig(originUrl) {
+    try {
+      const root = document.documentElement;
+      if (root.getAttribute(PRECONNECT_ATTR_BIG) === "1") return;
+      root.setAttribute(PRECONNECT_ATTR_BIG, "1");
+
+      const u = new URL(originUrl);
+      const origin = u.origin;
+
+      const add = (rel, href, cross) => {
+        if (document.head.querySelector(`link[rel="${rel}"][href="${href}"]`))
+          return;
+        const link = document.createElement("link");
+        link.rel = rel;
+        link.href = href;
+        if (cross) link.crossOrigin = "anonymous";
+        document.head.appendChild(link);
+      };
+
+      add("preconnect", origin, true);
+      add("dns-prefetch", origin, false);
+    } catch (e) {}
+  }
 
   function isCloudflareStreamIframeBig(urlStr) {
     try {
@@ -122,11 +147,19 @@
     }
   }
 
-  function cloudflareToHlsBig(urlStr) {
+  function cloudflareToIdsBig(urlStr) {
     const u = new URL(urlStr);
     const parts = u.pathname.split("/").filter(Boolean);
     const videoId = parts[0];
-    return { videoId, hls: `${u.origin}/${videoId}/manifest/video.m3u8` };
+    return { videoId, origin: u.origin };
+  }
+
+  function hlsUrlForBig(origin, videoId) {
+    return `${origin}/${videoId}/manifest/video.m3u8`;
+  }
+
+  function posterUrlForBig(origin, videoId) {
+    return `${origin}/${videoId}/thumbnails/thumbnail.jpg?time=1s`;
   }
 
   function setControlsVisibleBig(video, visible) {
@@ -150,7 +183,6 @@
   }
 
   function pauseOtherIfNeeded(video) {
-    // Pause only if there's another already-playing video
     if (currentPlayingBig && currentPlayingBig !== video) {
       try {
         if (!currentPlayingBig.paused && !currentPlayingBig.ended) {
@@ -164,7 +196,6 @@
   function wirePlayButtonBig(slide, video) {
     const btn = slide.querySelector(BTN_SELECTOR_BIG);
 
-    // Initial UI: paused
     setControlsVisibleBig(video, false);
     showBtnBig(btn);
 
@@ -201,29 +232,19 @@
       btn.dataset.listenerAttachedBig = "1";
     }
 
-    // Click-to-play only when paused (controls hidden)
-// Click-to-play only when paused (controls hidden) — and never steal clicks meant for controls
-if (video.dataset.videoClickAttachedBig !== "1") {
-  video.addEventListener(
-    "click",
-    (e) => {
-      // only left click / primary pointer
-      if (e.button != null && e.button !== 0) return;
+    if (video.dataset.videoClickAttachedBig !== "1") {
+      video.addEventListener(
+        "click",
+        (e) => {
+          if (e.button != null && e.button !== 0) return;
+          if (video.hasAttribute("controls")) return;
+          toggle();
+        },
+        true
+      );
+      video.dataset.videoClickAttachedBig = "1";
+    }
 
-      // If controls are visible, don't toggle on click.
-      // (Prevents breaking fullscreen/seek/volume)
-      if (video.hasAttribute("controls")) return;
-
-      toggle();
-    },
-    true, // capture helps avoid weird bubbling behavior in some browsers
-  );
-
-  video.dataset.videoClickAttachedBig = "1";
-}
-
-    // If play happens via any route, enforce exclusivity too
-    // (e.g., native controls play, programmatic play, etc.)
     video.addEventListener("play", () => {
       pauseOtherIfNeeded(video);
       currentPlayingBig = video;
@@ -236,7 +257,6 @@ if (video.dataset.videoClickAttachedBig !== "1") {
       showBtnBig(slide.querySelector(BTN_SELECTOR_BIG));
       setControlsVisibleBig(video, false);
 
-      // If the currently tracked one got paused, clear it
       if (currentPlayingBig === video) currentPlayingBig = null;
     });
 
@@ -297,8 +317,11 @@ if (video.dataset.videoClickAttachedBig !== "1") {
     videoEl._hlsInstanceBig = hls;
   }
 
-  function ensureVideoInSlideBig(slide, hlsUrl, videoId) {
+  function ensureVideoInSlideBig(slide, origin, videoId) {
     if (slide.getAttribute(PROCESSED_ATTR_BIG) === "1") return;
+
+    const hlsUrl = hlsUrlForBig(origin, videoId);
+    const posterUrl = posterUrlForBig(origin, videoId);
 
     let video = slide.querySelector(`video.${VIDEO_CLASS_BIG}`);
     if (!video) {
@@ -306,10 +329,13 @@ if (video.dataset.videoClickAttachedBig !== "1") {
       video.className = VIDEO_CLASS_BIG;
       video.setAttribute("playsinline", "");
       video.setAttribute("preload", "metadata");
+      video.setAttribute("poster", posterUrl);
       video.muted = false;
       video.style.width = "100%";
       video.style.height = "100%";
       slide.prepend(video);
+    } else {
+      if (!video.getAttribute("poster")) video.setAttribute("poster", posterUrl);
     }
 
     setControlsVisibleBig(video, false);
@@ -337,11 +363,15 @@ if (video.dataset.videoClickAttachedBig !== "1") {
       const src = iframe.getAttribute("src") || "";
       if (!isCloudflareStreamIframeBig(src)) return;
 
-      const { videoId, hls } = cloudflareToHlsBig(src);
+      const { videoId, origin } = cloudflareToIdsBig(src);
+      const hls = hlsUrlForBig(origin, videoId);
+
+      ensurePreconnectBig(origin);
+
       logBig("Found Cloudflare iframe in slide", { videoId, src, hls });
 
       iframe.style.display = "none";
-      ensureVideoInSlideBig(slide, hls, videoId);
+      ensureVideoInSlideBig(slide, origin, videoId);
       iframe.remove();
     });
   }

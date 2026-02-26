@@ -118,27 +118,63 @@
     const PROCESSED_ATTR = "data-hls-processed-2";
     const BTN_SELECTOR = ".play-button-pdp";
 
+    // If your Stream iframe is sometimes not cloudflarestream.com but a custom domain,
+    // this still works because we derive origin from iframe src.
+    const PRECONNECT_ATTR = "data-lf-preconnect-cfstream-2";
+
     let currentPlaying = null;
 
     const log = (...a) => console.log("[LF-HLS-2]", ...a);
 
+    function ensurePreconnect(originUrl) {
+      try {
+        const root = document.documentElement;
+        if (root.getAttribute(PRECONNECT_ATTR) === "1") return;
+        root.setAttribute(PRECONNECT_ATTR, "1");
+
+        const u = new URL(originUrl);
+        const origin = u.origin;
+
+        const add = (rel, href, cross) => {
+          const link = document.createElement("link");
+          link.rel = rel;
+          link.href = href;
+          if (cross) link.crossOrigin = "anonymous";
+          document.head.appendChild(link);
+        };
+
+        add("preconnect", origin, true);
+        add("dns-prefetch", origin, false);
+        log("Preconnect injected:", origin);
+      } catch (e) {
+        // ignore
+      }
+    }
+
     function isCloudflareStreamIframe(urlStr) {
       try {
         const u = new URL(urlStr);
-        return (
-          u.hostname.endsWith("cloudflarestream.com") &&
-          u.pathname.includes("/iframe")
-        );
+        return u.pathname.includes("/iframe");
       } catch {
         return false;
       }
     }
 
-    function cloudflareToHls(urlStr) {
+    function cloudflareToIds(urlStr) {
       const u = new URL(urlStr);
       const parts = u.pathname.split("/").filter(Boolean);
       const videoId = parts[0];
-      return { videoId, hls: `${u.origin}/${videoId}/manifest/video.m3u8` };
+      return { videoId, origin: u.origin };
+    }
+
+    function hlsUrlFor(origin, videoId) {
+      return `${origin}/${videoId}/manifest/video.m3u8`;
+    }
+
+    function posterUrlFor(origin, videoId) {
+      // Cloudflare Stream common thumbnail endpoint
+      // If your account uses a different thumbnail path, tell me and I’ll adjust.
+      return `${origin}/${videoId}/thumbnails/thumbnail.jpg?time=1s`;
     }
 
     function setControlsVisible(video, visible) {
@@ -165,24 +201,80 @@
       if (currentPlaying && currentPlaying !== video) {
         try {
           if (!currentPlaying.paused && !currentPlaying.ended) {
-            log("Pausing previous playing video");
             currentPlaying.pause();
           }
         } catch (e) {}
       }
     }
 
-    function wirePlayButton(slide, video) {
+    function canNativeHls(videoEl) {
+      return (
+        !!videoEl.canPlayType("application/vnd.apple.mpegurl") ||
+        !!videoEl.canPlayType("application/x-mpegURL")
+      );
+    }
+
+    function initHlsIfNeeded(videoEl, hlsUrl, videoId) {
+      // Already attached
+      if (videoEl._hlsInstance2 || videoEl.dataset.hlsAttached2 === "1") return;
+
+      const native = canNativeHls(videoEl);
+
+      log("Init (lazy) video", { videoId, hlsUrl, nativeHls: !!native });
+
+      if (native) {
+        // Set only once
+        if (videoEl.src !== hlsUrl) videoEl.src = hlsUrl;
+        videoEl.dataset.hlsAttached2 = "1";
+        return;
+      }
+
+      if (!window.Hls || !window.Hls.isSupported()) {
+        log("Hls.js not supported in this browser.", videoEl);
+        return;
+      }
+
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+
+        // Faster startup tuning
+        startLevel: 0,
+        autoStartLoad: true,
+        maxBufferLength: 10,
+        maxMaxBufferLength: 30,
+        backBufferLength: 0,
+        manifestLoadingTimeOut: 10000,
+        levelLoadingTimeOut: 10000,
+      });
+
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(videoEl);
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        log("HLS error", { videoId, event, data });
+      });
+
+      videoEl._hlsInstance2 = hls;
+      videoEl.dataset.hlsAttached2 = "1";
+    }
+
+    function wirePlayButton(slide, video, hlsUrl, videoId) {
       const btn = slide.querySelector(BTN_SELECTOR);
 
+      // Default state: overlay button visible, no controls
       setControlsVisible(video, false);
       showBtn(btn);
 
       if (video.dataset.btnWired2 === "1") return;
       video.dataset.btnWired2 = "1";
 
-      const playWithExclusivity = async () => {
+      const ensureReadyThenPlay = async () => {
         pauseOtherIfNeeded(video);
+
+        // Lazy attach HLS only when needed
+        initHlsIfNeeded(video, hlsUrl, videoId);
+
         try {
           await video.play();
         } catch (e) {
@@ -193,7 +285,7 @@
       const toggle = async () => {
         try {
           if (video.paused || video.ended) {
-            await playWithExclusivity();
+            await ensureReadyThenPlay();
           } else {
             video.pause();
           }
@@ -253,6 +345,7 @@
         }
       };
 
+      // Keep overlay stable if LF re-renders inside the slide
       const localObs = new MutationObserver(() => refreshUI());
       localObs.observe(slide, { childList: true, subtree: true });
       video._btnObserver2 = localObs;
@@ -260,59 +353,74 @@
       refreshUI();
     }
 
-    function initHls(videoEl, hlsUrl, videoId) {
-      const canNative =
-        videoEl.canPlayType("application/vnd.apple.mpegurl") ||
-        videoEl.canPlayType("application/x-mpegURL");
-
-      log("Init video", { videoId, hlsUrl, nativeHls: !!canNative });
-
-      if (canNative) {
-        videoEl.src = hlsUrl;
-        return;
-      }
-
-      if (!window.Hls || !window.Hls.isSupported()) {
-        log("Hls.js not supported in this browser.", videoEl);
-        return;
-      }
-
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-      });
-
-      hls.loadSource(hlsUrl);
-      hls.attachMedia(videoEl);
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        log("HLS error", { videoId, event, data });
-      });
-
-      videoEl._hlsInstance2 = hls;
-    }
-
-    function ensureVideoInSlide(slide, hlsUrl, videoId) {
+    function ensureVideoInSlide(slide, origin, videoId) {
       if (slide.getAttribute(PROCESSED_ATTR) === "1") return;
+
+      const hlsUrl = hlsUrlFor(origin, videoId);
+      const posterUrl = posterUrlFor(origin, videoId);
 
       let video = slide.querySelector(`video.${VIDEO_CLASS}`);
       if (!video) {
         video = document.createElement("video");
         video.className = VIDEO_CLASS;
         video.setAttribute("playsinline", "");
-        video.setAttribute("preload", "metadata");
         video.muted = false;
+
+        // We’ll set preload based on priority later
+        video.setAttribute("preload", "metadata");
+
+        // Poster = instant paint while HLS is still loading
+        video.setAttribute("poster", posterUrl);
+
+        // Let CSS control sizing, but keep these as safety
         video.style.width = "100%";
         video.style.height = "100%";
+
         slide.prepend(video);
+      } else {
+        // Ensure poster exists even if LF recreated node
+        if (!video.getAttribute("poster")) video.setAttribute("poster", posterUrl);
       }
+
+      // Store computed urls for lazy attach
+      video.dataset.hlsUrl2 = hlsUrl;
+      video.dataset.videoId2 = videoId;
 
       setControlsVisible(video, false);
 
-      initHls(video, hlsUrl, videoId);
-      wirePlayButton(slide, video);
+      // Wire play logic (lazy init happens on click)
+      wirePlayButton(slide, video, hlsUrl, videoId);
 
       slide.setAttribute(PROCESSED_ATTR, "1");
+    }
+
+    function setPreloadForVisibleSlides() {
+      const slider = document.querySelector(".pdp-slider-vid-2");
+      if (!slider) return;
+
+      // Prefer Swiper active slide if available
+      const active =
+        slider.querySelector(".swiper-slide-active") ||
+        slider.querySelector(SLIDE_SELECTOR);
+
+      // Set active to preload=auto, others metadata
+      slider.querySelectorAll(SLIDE_SELECTOR).forEach((slide) => {
+        const video = slide.querySelector(`video.${VIDEO_CLASS}`);
+        if (!video) return;
+
+        const isPriority = slide === active;
+        video.setAttribute("preload", isPriority ? "auto" : "metadata");
+
+        // Optional: eagerly attach HLS for active slide only (still lazy on play for others)
+        if (isPriority) {
+          const hlsUrl = video.dataset.hlsUrl2;
+          const videoId = video.dataset.videoId2;
+          if (hlsUrl && videoId) {
+            // Attach in next frame to avoid blocking paint
+            requestAnimationFrame(() => initHlsIfNeeded(video, hlsUrl, videoId));
+          }
+        }
+      });
     }
 
     function processSlides(root = document) {
@@ -321,8 +429,13 @@
 
       slides.forEach((slide) => {
         if (slide.getAttribute(PROCESSED_ATTR) === "1") {
+          // Re-wire if LF re-rendered the button
           const video = slide.querySelector(`video.${VIDEO_CLASS}`);
-          if (video) wirePlayButton(slide, video);
+          if (video) {
+            const hlsUrl = video.dataset.hlsUrl2;
+            const videoId = video.dataset.videoId2;
+            if (hlsUrl && videoId) wirePlayButton(slide, video, hlsUrl, videoId);
+          }
           return;
         }
 
@@ -332,21 +445,34 @@
         const src = iframe.getAttribute("src") || "";
         if (!isCloudflareStreamIframe(src)) return;
 
-        const { videoId, hls } = cloudflareToHls(src);
-        log("Found Cloudflare iframe in slide", { videoId, src, hls });
+        const { videoId, origin } = cloudflareToIds(src);
 
+        ensurePreconnect(origin);
+
+        // Insert video + poster first (paint fast), then remove iframe after
+        ensureVideoInSlide(slide, origin, videoId);
+
+        // Hide + remove iframe (next frame keeps UI smoother)
         iframe.style.display = "none";
-        ensureVideoInSlide(slide, hls, videoId);
-        iframe.remove();
+        requestAnimationFrame(() => {
+          try {
+            iframe.remove();
+          } catch (e) {}
+        });
       });
+
+      // After ensuring all videos/posters, tune preload strategy
+      setPreloadForVisibleSlides();
     }
 
+    // Initial run
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () => processSlides());
     } else {
       processSlides();
     }
 
+    // Observe DOM changes from LF/React
     const obs = new MutationObserver((mutations) => {
       const relevant = mutations.some((m) =>
         [...m.addedNodes].some(
@@ -360,11 +486,40 @@
               n.querySelector?.(BTN_SELECTOR)),
         ),
       );
+
       if (relevant) processSlides();
     });
 
     obs.observe(document.documentElement, { childList: true, subtree: true });
 
-    log("Observer attached");
+    // If swiper exists, update preload strategy on slide changes
+    // (works if your first script stored el._pdpSwiper2)
+    const hookSwiper = () => {
+      const slider = document.querySelector(".pdp-slider-vid-2");
+      const sw = slider && slider._pdpSwiper2;
+      if (!sw || sw._lfHooked2) return;
+      sw._lfHooked2 = true;
+
+      sw.on("slideChangeTransitionStart", () => {
+        // Pause all videos on slide change (keep your old behavior)
+        document
+          .querySelectorAll(".pdp-slider-vid-2 video.lf-hls-video-2")
+          .forEach((v) => {
+            try {
+              v.pause();
+            } catch (e) {}
+          });
+
+        // Update preload + eager attach for active slide
+        setPreloadForVisibleSlides();
+      });
+    };
+
+    // Try to hook now + later
+    hookSwiper();
+    const swHookObs = new MutationObserver(() => hookSwiper());
+    swHookObs.observe(document.body, { childList: true, subtree: true });
+
+    log("Observer attached (lazy HLS + poster + preconnect)");
   })();
 </script>

@@ -1,17 +1,19 @@
 <style>
   #the-bundles .active,
-  #the-bundles-2 .active{
-    background: #FEECED !important;
+  #the-bundles-2 .active {
+    background: #feeced !important;
   }
   /* hide native radio UI */
-  [data-lf-hide="radio"] { display: none !important; }
+  [data-lf-hide="radio"] {
+    display: none !important;
+  }
 
   [data-lf-processed="1"] {
     flex-wrap: nowrap !important;
   }
 
   /* icon */
-  [data-lf-icon]{
+  [data-lf-icon] {
     height: 57px;
     display: inline-block;
     margin-right: 10px;
@@ -20,21 +22,21 @@
   }
 
   /* title column */
-  [data-lf-titlewrap]{
+  [data-lf-titlewrap] {
     display: flex;
     flex-direction: column;
     color: #000000;
   }
 
   /* NEW: title row = title + badge */
-  [data-lf-title-row]{
+  [data-lf-title-row] {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: nowrap;
   }
 
-  [data-lf-title]{
+  [data-lf-title] {
     line-height: 21px !important;
     letter-spacing: 0% !important;
     font-size: 15.3px !important;
@@ -42,9 +44,9 @@
   }
 
   /* NEW: percent-off badge (pink/red variant) */
-  [data-lf-percent-off]{
-    background: #FFD3D6;
-    color: #A03F3F;
+  [data-lf-percent-off] {
+    background: #ffd3d6;
+    color: #a03f3f;
     border-radius: 2.07px;
     height: 17px;
     padding: 0 5.5px;
@@ -56,7 +58,7 @@
     font-weight: 700;
   }
 
-  [data-lf-subtitle]{
+  [data-lf-subtitle] {
     margin-top: 5.5px !important;
     font-size: 15.2px !important;
     line-height: 21px !important;
@@ -64,20 +66,21 @@
   }
 
   @media (max-width: 425px) {
-    [data-lf-titlewrap]{
+    [data-lf-titlewrap] {
       max-width: 145px !important;
     }
-    [data-lf-title],[data-lf-subtitle]{
+    [data-lf-title],
+    [data-lf-subtitle] {
       font-size: 12px !important;
     }
-    [data-lf-title]{
+    [data-lf-title] {
       line-height: 19px !important;
     }
-    [data-lf-subtitle]{
+    [data-lf-subtitle] {
       line-height: 17px !important;
       margin-top: 4px !important;
     }
-    [data-lf-percent-off]{
+    [data-lf-percent-off] {
       font-size: 10.5px;
       height: 16px;
       line-height: 16px;
@@ -85,46 +88,77 @@
     }
   }
 </style>
-
 <script>
 (function () {
-
-  /* 🔹 Add any bundle container IDs here */
-  const BUNDLE_ROOTS = [
-    "the-bundles",
-    "the-bundles-2"
-  ];
+  const BUNDLE_ROOTS = ["the-bundles", "the-bundles-2"];
 
   const ICONS = {
     "Buy 1":
-      "https://assets.lightfunnels.com/account-90380/images_library/91df25f3-160e-41b8-a862-5047c695cd72.b094ee33cd3abe3f46504721fc624c2cbccc5b30.png",
+      "https://assets.lightfunnels.com/account-90380/images_library/45bc7ef9-c6b9-451c-be84-f4cb226db096.Resilia® Oil Of Oregano Softgels.png",
     "Buy 2 Get 1 Free":
-      "https://assets.lightfunnels.com/account-90380/images_library/44bc24d3-24fe-45b2-a3bb-0be1343e8f4d.90a1ac3df8b854821642a6df3c159cca49d5600a.png",
+      "https://assets.lightfunnels.com/account-90380/images_library/5d43206e-881b-45a7-a22e-2c6aff713c13.Resilia® Oil Of Oregano Softgels (1).png",
     "Buy 3 Get 2 Free":
-      "https://assets.lightfunnels.com/account-90380/images_library/2452f68a-9267-479f-bccc-c8f4f2729061.0e37714597fb4efda1fdc823e919b969887fc37a.png",
+      "https://assets.lightfunnels.com/account-90380/images_library/531a6583-e992-43ef-916c-6e018baf95e8.Resilia® Oil Of Oregano Softgels (2).png",
   };
 
   const SUBTITLES = {
     "Buy 1": "75 day supply",
-    "Buy 2 Get 1 Free": "225 day supply", 
+    "Buy 2 Get 1 Free": "225 day supply",
     "Buy 3 Get 2 Free": "375 day supply",
   };
 
-  /* NEW: badge text per title (leave "" to hide for that bundle) */
   const BADGES = {
     "Buy 1": "30% OFF",
     "Buy 2 Get 1 Free": "37% OFF",
     "Buy 3 Get 2 Free": "42% OFF",
   };
 
-  function norm(s){
+  function norm(s) {
     return (s || "")
       .replace(/\u2011|\u2013|\u2014/g, "-")
       .replace(/\s+/g, " ")
       .trim();
   }
 
-  function enhanceContainer(container){
+  // ---------- Lazy loader (RESTORED) ----------
+  const IO_SUPPORTED = "IntersectionObserver" in window;
+  let io = null;
+
+  function ensureIO() {
+    if (!IO_SUPPORTED || io) return;
+    io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const img = entry.target;
+          const src = img.getAttribute("data-src");
+          if (src) img.src = src;
+          img.removeAttribute("data-src");
+          io.unobserve(img);
+        });
+      },
+      { root: null, rootMargin: "250px 0px", threshold: 0.01 }
+    );
+  }
+
+  function registerLazy(img, src) {
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.setAttribute("fetchpriority", "low");
+
+    img.setAttribute("data-src", src);
+
+    if (IO_SUPPORTED) {
+      ensureIO();
+      io.observe(img);
+    } else {
+      img.src = src;
+      img.removeAttribute("data-src");
+    }
+  }
+  // ------------------------------------------
+
+  function enhanceContainer(container) {
     if (!container) return;
 
     const titleSpans = container.querySelectorAll("span.n0NQf");
@@ -132,7 +166,6 @@
     titleSpans.forEach((titleSpan) => {
       const row = titleSpan.parentElement;
       if (!row) return;
-
       if (row.dataset.lfProcessed === "1") return;
 
       const titleText = norm(titleSpan.textContent);
@@ -140,26 +173,36 @@
       const subtitleText = SUBTITLES[titleText] || "";
       const badgeText = (BADGES[titleText] || "").trim();
 
+      // Only process titles we know (prevents accidental processing)
+      if (!iconSrc && !subtitleText && !badgeText) return;
+
       row.dataset.lfProcessed = "1";
 
-      /* Hide native radio */
+      // Hide native radio
       const prev = titleSpan.previousElementSibling;
       if (prev) prev.setAttribute("data-lf-hide", "radio");
 
-      /* Insert icon */
+      // Insert icon (lazy) + explicit size
       if (iconSrc) {
         const img = document.createElement("img");
         img.setAttribute("data-lf-icon", "1");
-        img.src = iconSrc;
         img.alt = titleText + " icon";
+
+        img.width = 57;
+        img.height = 57;
+        img.style.width = "57px";
+        img.style.height = "57px";
+        img.style.objectFit = "cover";
+
+        registerLazy(img, iconSrc);
+
         row.insertBefore(img, titleSpan);
       }
 
-      /* Create title column */
+      // Create title column
       const wrap = document.createElement("div");
       wrap.setAttribute("data-lf-titlewrap", "1");
 
-      /* Title row */
       const titleRow = document.createElement("div");
       titleRow.setAttribute("data-lf-title-row", "1");
 
@@ -184,7 +227,7 @@
 
       titleSpan.replaceWith(wrap);
 
-      /* Ensure horizontal layout */
+      // Ensure horizontal layout
       const cs = window.getComputedStyle(row);
       if (cs.display !== "flex") {
         row.style.display = "flex";
@@ -193,14 +236,14 @@
     });
   }
 
-  function enhanceAll(){
-    BUNDLE_ROOTS.forEach(id => {
+  function enhanceAll() {
+    BUNDLE_ROOTS.forEach((id) => {
       const el = document.getElementById(id);
       if (el) enhanceContainer(el);
     });
   }
 
-  function schedule(){
+  function schedule() {
     clearTimeout(window.__lfBundlesTO);
     window.__lfBundlesTO = setTimeout(enhanceAll, 50);
   }
@@ -212,11 +255,6 @@
   }
 
   const observer = new MutationObserver(schedule);
-
-  observer.observe(document.documentElement, {
-    subtree: true,
-    childList: true
-  });
-
+  observer.observe(document.documentElement, { subtree: true, childList: true });
 })();
 </script>

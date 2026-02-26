@@ -1,0 +1,132 @@
+<script>
+(function () {
+  /* ============================
+     CONFIG — edit these easily
+  ============================ */
+  const TARGET_CLASSES = [
+    "delivary-date-estimate",
+    "delivary-date-estimate-2"
+  ];
+
+  const DATE_COLOR = "#a03f3f";
+
+  /* ============================
+     Utilities
+  ============================ */
+  function getOrdinal(day) {
+    if (day > 3 && day < 21) return day + "th";
+    switch (day % 10) {
+      case 1: return day + "st";
+      case 2: return day + "nd";
+      case 3: return day + "rd";
+      default: return day + "th";
+    }
+  }
+
+  function getNextWeekDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    const month = d.toLocaleString("en-US", { month: "long" });
+    const day = getOrdinal(d.getDate());
+    return `${month} ${day}`;
+  }
+
+  function isElement(node) {
+    return node && node.nodeType === 1;
+  }
+
+  function matchesAnyTarget(el) {
+    for (let i = 0; i < TARGET_CLASSES.length; i++) {
+      if (el.classList && el.classList.contains(TARGET_CLASSES[i])) return true;
+    }
+    return false;
+  }
+
+  function findTargetsWithin(root) {
+    const found = [];
+    if (!isElement(root)) return found;
+
+    if (matchesAnyTarget(root)) found.push(root);
+
+    for (let i = 0; i < TARGET_CLASSES.length; i++) {
+      const cls = TARGET_CLASSES[i];
+      root.querySelectorAll("." + cls).forEach(el => found.push(el));
+    }
+    return found;
+  }
+
+  function updateElement(el) {
+    if (!isElement(el)) return;
+
+    // Prevent re-writing endlessly
+    if (el.dataset.lfDeliveryUpdated === "1") return;
+
+    const contentEl = el.firstElementChild; // avoids .wys temp class
+    if (!contentEl) return;
+
+    const newDate = getNextWeekDate();
+
+    contentEl.innerHTML =
+      'Order now for delivery by: ' +
+      ' <u><b><font color="' + DATE_COLOR + '">' + newDate + '</font></b></u>';
+
+    el.dataset.lfDeliveryUpdated = "1";
+  }
+
+  function updateAllExisting() {
+    // First load: scan once
+    TARGET_CLASSES.forEach(cls => {
+      document.querySelectorAll("." + cls).forEach(updateElement);
+    });
+  }
+
+  /* ============================
+     Observer (debounced + only new nodes)
+  ============================ */
+  let scheduled = false;
+  const pending = new Set();
+
+  function scheduleFlush() {
+    if (scheduled) return;
+    scheduled = true;
+
+    // small debounce to batch mutations
+    setTimeout(function () {
+      scheduled = false;
+      pending.forEach(updateElement);
+      pending.clear();
+    }, 50);
+  }
+
+  function onMutations(mutations) {
+    for (let m = 0; m < mutations.length; m++) {
+      const mut = mutations[m];
+      if (!mut.addedNodes || mut.addedNodes.length === 0) continue;
+
+      mut.addedNodes.forEach(node => {
+        if (!isElement(node)) return;
+
+        const targets = findTargetsWithin(node);
+        for (let i = 0; i < targets.length; i++) {
+          pending.add(targets[i]);
+        }
+      });
+    }
+
+    if (pending.size) scheduleFlush();
+  }
+
+  function init() {
+    updateAllExisting();
+
+    const observer = new MutationObserver(onMutations);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>

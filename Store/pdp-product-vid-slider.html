@@ -106,7 +106,6 @@
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-
 <script>
 (() => {
   const SLIDE_SELECTOR = ".pdp-slider-vid .swiper-slide";
@@ -115,10 +114,36 @@
   const PROCESSED_ATTR = "data-hls-processed";
   const BTN_SELECTOR = ".play-button-pdp";
 
+  const PRECONNECT_ATTR = "data-lf-preconnect-cfstream-1";
+
   // Track currently playing video (within this slider)
   let currentPlaying = null;
 
   const log = (...a) => console.log("[LF-HLS]", ...a);
+
+  function ensurePreconnect(originUrl) {
+    try {
+      const root = document.documentElement;
+      if (root.getAttribute(PRECONNECT_ATTR) === "1") return;
+      root.setAttribute(PRECONNECT_ATTR, "1");
+
+      const u = new URL(originUrl);
+      const origin = u.origin;
+
+      const add = (rel, href, cross) => {
+        if (document.head.querySelector(`link[rel="${rel}"][href="${href}"]`))
+          return;
+        const link = document.createElement("link");
+        link.rel = rel;
+        link.href = href;
+        if (cross) link.crossOrigin = "anonymous";
+        document.head.appendChild(link);
+      };
+
+      add("preconnect", origin, true);
+      add("dns-prefetch", origin, false);
+    } catch (e) {}
+  }
 
   function isCloudflareStreamIframe(urlStr) {
     try {
@@ -132,11 +157,19 @@
     }
   }
 
-  function cloudflareToHls(urlStr) {
+  function cloudflareToIds(urlStr) {
     const u = new URL(urlStr);
     const parts = u.pathname.split("/").filter(Boolean); // /<videoId>/iframe
     const videoId = parts[0];
-    return { videoId, hls: `${u.origin}/${videoId}/manifest/video.m3u8` };
+    return { videoId, origin: u.origin };
+  }
+
+  function hlsUrlFor(origin, videoId) {
+    return `${origin}/${videoId}/manifest/video.m3u8`;
+  }
+
+  function posterUrlFor(origin, videoId) {
+    return `${origin}/${videoId}/thumbnails/thumbnail.jpg?time=1s`;
   }
 
   function setControlsVisible(video, visible) {
@@ -293,8 +326,11 @@
     videoEl._hlsInstance = hls;
   }
 
-  function ensureVideoInSlide(slide, hlsUrl, videoId) {
+  function ensureVideoInSlide(slide, origin, videoId) {
     if (slide.getAttribute(PROCESSED_ATTR) === "1") return;
+
+    const hlsUrl = hlsUrlFor(origin, videoId);
+    const posterUrl = posterUrlFor(origin, videoId);
 
     let video = slide.querySelector(`video.${VIDEO_CLASS}`);
     if (!video) {
@@ -302,10 +338,13 @@
       video.className = VIDEO_CLASS;
       video.setAttribute("playsinline", "");
       video.setAttribute("preload", "metadata");
+      video.setAttribute("poster", posterUrl);
       video.muted = false;
       video.style.width = "100%";
       video.style.height = "100%";
       slide.prepend(video);
+    } else {
+      if (!video.getAttribute("poster")) video.setAttribute("poster", posterUrl);
     }
 
     setControlsVisible(video, false);
@@ -333,11 +372,15 @@
       const src = iframe.getAttribute("src") || "";
       if (!isCloudflareStreamIframe(src)) return;
 
-      const { videoId, hls } = cloudflareToHls(src);
+      const { videoId, origin } = cloudflareToIds(src);
+      const hls = hlsUrlFor(origin, videoId);
+
+      ensurePreconnect(origin);
+
       log("Found Cloudflare iframe in slide", { videoId, src, hls });
 
       iframe.style.display = "none";
-      ensureVideoInSlide(slide, hls, videoId);
+      ensureVideoInSlide(slide, origin, videoId);
       iframe.remove();
     });
   }

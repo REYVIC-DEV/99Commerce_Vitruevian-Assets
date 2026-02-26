@@ -1,0 +1,291 @@
+<script>
+  (function () {
+    const PAYMENT_ROOT = "#payment-picker";
+
+    const PAYMENT_CFG = {
+      "Debit/Credit Card": {
+        logos: null,
+        width: null,
+        height: 22,
+        gap: 6,
+
+        // NEW:
+        maxInline: 3, // show 3 inline
+        showPopover: true, // show popover with the rest
+        popoverGap: 8,
+        popoverPadding: 10,
+        popoverMaxWidth: 180,
+      },
+
+      Klarna: { logos: "https://hlthtrack.com/cdn/shopifycloud/checkout-web/assets/c1/assets/klarna.s27CILOb.svg", width: null, height: null },
+      Bancontact: { logos: null, width: null, height: null },
+      Giropay: { logos: null, width: null, height: null },
+      iDeal: { logos: null, width: null, height: null },
+      Zip: { logos: null, width: null, height: null },
+      Przelewy24: { logos: null, width: null, height: null },
+      Sofort: { logos: null, width: null, height: null },
+    };
+
+    function toCssSize(v) {
+      if (v === null || v === undefined) return null;
+      if (typeof v === "number") return v + "px";
+      if (typeof v === "string" && v.trim()) return v.trim();
+      return null;
+    }
+
+    function ensureBaseStylesOnce() {
+      if (document.getElementById("lf-pay-logos-style")) return;
+      const style = document.createElement("style");
+      style.id = "lf-pay-logos-style";
+      style.textContent = `
+      [data-lf-paywrap="1"]{ display:inline-flex; align-items:center; gap:6px; position:relative; }
+      [data-lf-paywrap="1"] img{ display:block; object-fit:contain; }
+
+      [data-lf-morepill="1"]{
+        display:inline-flex; align-items:center; justify-content:center;
+        font-size:12px; line-height:1;
+        padding:4px 7px;
+        border:1px solid rgba(0,0,0,.15);
+        border-radius:8px;
+        user-select:none;
+        cursor:default;
+        background:#fff;
+      }
+
+      [data-lf-popover="1"]{
+        position:absolute;
+        bottom: calc(100% + 8px);   /* 🔥 move above */
+        right: 0;
+        z-index:9999;
+        background:#111;
+        border-radius:10px;
+        padding:10px;
+        display:none;
+        box-shadow:0 10px 30px rgba(0,0,0,.25);
+      }
+
+      [data-lf-popover="1"][data-open="1"]{ display:block; }
+
+      [data-lf-popgrid="1"]{
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+        align-items:center;
+        max-width:180px;
+      }
+
+      [data-lf-popover="1"] img{
+        background:#fff;
+        border-radius:6px;
+        padding:2px 4px;
+      }
+    `;
+      document.head.appendChild(style);
+    }
+
+    function getTitleFromHeaderLogo(headerImg) {
+      const container = headerImg.parentElement;
+      if (!container) return null;
+      const titleSpan = container.querySelector("span");
+      return titleSpan ? (titleSpan.textContent || "").trim() : null;
+    }
+
+    function buildImg(url, cfg, isPopover) {
+      const img = document.createElement("img");
+      img.setAttribute("data-lf-inserted", "1");
+      img.alt = "Payment Method Logo";
+      img.src = url;
+
+      const w = toCssSize(cfg.width);
+      const h = toCssSize(cfg.height);
+
+      if (w) img.style.width = w;
+      if (h) img.style.height = h;
+
+      // popover images often look better a bit smaller
+      if (isPopover && !h) img.style.height = "22px";
+
+      return img;
+    }
+
+    function buildWrapperWithOverflow(urls, cfg) {
+      ensureBaseStylesOnce();
+
+      const maxInline = Number.isFinite(cfg.maxInline) ? cfg.maxInline : 3;
+      const showPopover = cfg.showPopover !== false; // default true
+
+      const wrap = document.createElement("span");
+      wrap.setAttribute("data-lf-paywrap", "1");
+      wrap.setAttribute("data-lf-payment-logos", "1");
+      wrap.style.gap = (Number.isFinite(cfg.gap) ? cfg.gap : 6) + "px";
+
+      // signature to prevent rebuild loops
+      wrap.dataset.lfSig = urls.join("|");
+      wrap.dataset.lfW = toCssSize(cfg.width) || "";
+      wrap.dataset.lfH = toCssSize(cfg.height) || "";
+      wrap.dataset.lfMax = String(maxInline);
+
+      const inline = urls.slice(0, maxInline);
+      const overflow = urls.slice(maxInline);
+
+      inline.forEach((u) => wrap.appendChild(buildImg(u, cfg, false)));
+
+      if (overflow.length) {
+        const pill = document.createElement("span");
+        pill.setAttribute("data-lf-morepill", "1");
+        pill.textContent = `+${overflow.length}`;
+        wrap.appendChild(pill);
+
+        if (showPopover) {
+          const pop = document.createElement("div");
+          pop.setAttribute("data-lf-popover", "1");
+
+          const pad = Number.isFinite(cfg.popoverPadding)
+            ? cfg.popoverPadding
+            : 10;
+          const g = Number.isFinite(cfg.popoverGap) ? cfg.popoverGap : 8;
+          const mw = Number.isFinite(cfg.popoverMaxWidth)
+            ? cfg.popoverMaxWidth
+            : 180;
+
+          pop.style.padding = pad + "px";
+
+          const grid = document.createElement("div");
+          grid.setAttribute("data-lf-popgrid", "1");
+          grid.style.gap = g + "px";
+          grid.style.maxWidth = mw + "px";
+
+          // ✅ ONLY SHOW THE HIDDEN ONES
+          overflow.forEach((u) => grid.appendChild(buildImg(u, cfg, true)));
+
+          pop.appendChild(grid);
+          wrap.appendChild(pop);
+
+          // Hover (desktop)
+          wrap.addEventListener("mouseenter", () =>
+            pop.setAttribute("data-open", "1"),
+          );
+          wrap.addEventListener("mouseleave", () =>
+            pop.removeAttribute("data-open"),
+          );
+
+          // Tap/click (mobile)
+          pill.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const isOpen = pop.getAttribute("data-open") === "1";
+            if (isOpen) pop.removeAttribute("data-open");
+            else pop.setAttribute("data-open", "1");
+          });
+
+          document.addEventListener(
+            "click",
+            () => pop.removeAttribute("data-open"),
+            { passive: true },
+          );
+        }
+      }
+
+      return wrap;
+    }
+    function applyConfigToHeaderLogo(headerImg, cfg) {
+      if (!headerImg || !cfg) return;
+
+      const logos = cfg.logos;
+
+      // null/undefined: no change
+      if (logos === null || logos === undefined) return;
+
+      // string: single swap
+      if (typeof logos === "string") {
+        const newSrc = logos.trim();
+        if (newSrc && headerImg.getAttribute("src") !== newSrc)
+          headerImg.setAttribute("src", newSrc);
+        return;
+      }
+
+      // array: wrapper with +X and popover
+      if (Array.isArray(logos)) {
+        const urls = logos
+          .map((s) => (typeof s === "string" ? s.trim() : ""))
+          .filter(Boolean);
+        if (!urls.length) return;
+
+        const parent = headerImg.parentElement;
+        if (!parent) return;
+
+        const existing = parent.querySelector(
+          ':scope > [data-lf-payment-logos="1"]',
+        );
+        const sig = urls.join("|");
+        const w = toCssSize(cfg.width) || "";
+        const h = toCssSize(cfg.height) || "";
+        const maxInline = Number.isFinite(cfg.maxInline)
+          ? String(cfg.maxInline)
+          : "3";
+
+        if (
+          existing &&
+          existing.dataset.lfSig === sig &&
+          (existing.dataset.lfW || "") === w &&
+          (existing.dataset.lfH || "") === h &&
+          (existing.dataset.lfMax || "") === maxInline
+        ) {
+          return;
+        }
+
+        const wrapper = buildWrapperWithOverflow(urls, cfg);
+        headerImg.replaceWith(wrapper);
+      }
+    }
+
+    // debounce + lock
+    let scheduled = false;
+    let running = false;
+
+    function run() {
+      if (running) return;
+      running = true;
+      try {
+        const root = document.querySelector(PAYMENT_ROOT);
+        if (!root) return;
+
+        const headerLogos = root.querySelectorAll(
+          'img[alt="Payment Method Logo"]:not([data-lf-inserted="1"])',
+        );
+
+        headerLogos.forEach((img) => {
+          const title = getTitleFromHeaderLogo(img);
+          if (!title) return;
+          const cfg = PAYMENT_CFG[title];
+          if (!cfg) return;
+          applyConfigToHeaderLogo(img, cfg);
+        });
+      } finally {
+        running = false;
+      }
+    }
+
+    function scheduleRun() {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        run();
+      });
+    }
+
+    function observe() {
+      const obs = new MutationObserver(scheduleRun);
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
+    function init() {
+      run();
+      observe();
+    }
+
+    if (document.readyState === "loading")
+      document.addEventListener("DOMContentLoaded", init);
+    else init();
+  })();
+</script>

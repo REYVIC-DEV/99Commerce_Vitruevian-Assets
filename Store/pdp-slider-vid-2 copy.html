@@ -40,7 +40,7 @@
 
   /* Progress bar color */
   .pdp-slider-vid-pagination-2 .swiper-pagination-progressbar-fill {
-    background-color: #A03F3F !important;
+    background-color: #a03f3f !important;
   }
 
   /* Responsive placeholders */
@@ -48,6 +48,14 @@
     .pdp-slider-vid-pagination-2 {
       display: none !important;
     }
+  }
+  @media (max-width: 1024px) {
+  }
+  @media (max-width: 768px) {
+  }
+  @media (max-width: 425px) {
+  }
+  @media (max-width: 320px) {
   }
 </style>
 
@@ -101,25 +109,47 @@
     subtree: true,
   });
 </script>
-
 <script>
   (() => {
-    // Skip Swiper loop-clone slides to reduce duplicated work
-    const SLIDE_SELECTOR =
-      ".pdp-slider-vid-2 .swiper-slide:not(.swiper-slide-duplicate)";
-
+    const SLIDE_SELECTOR = ".pdp-slider-vid-2 .swiper-slide";
     const IFRAME_SELECTOR = "iframe";
     const VIDEO_CLASS = "lf-hls-video-2";
     const PROCESSED_ATTR = "data-hls-processed-2";
     const BTN_SELECTOR = ".play-button-pdp";
 
+    const PRECONNECT_ATTR = "data-lf-preconnect-cfstream-2";
+
     let currentPlaying = null;
 
     const log = (...a) => console.log("[LF-HLS-2]", ...a);
 
+    function ensurePreconnect(originUrl) {
+      try {
+        const root = document.documentElement;
+        if (root.getAttribute(PRECONNECT_ATTR) === "1") return;
+        root.setAttribute(PRECONNECT_ATTR, "1");
+
+        const u = new URL(originUrl);
+        const origin = u.origin;
+
+        const add = (rel, href, cross) => {
+          if (document.head.querySelector(`link[rel="${rel}"][href="${href}"]`))
+            return;
+          const link = document.createElement("link");
+          link.rel = rel;
+          link.href = href;
+          if (cross) link.crossOrigin = "anonymous";
+          document.head.appendChild(link);
+        };
+
+        add("preconnect", origin, true);
+        add("dns-prefetch", origin, false);
+      } catch (e) {}
+    }
+
     function isCloudflareStreamIframe(urlStr) {
       try {
-        const u = new URL(urlStr, location.href);
+        const u = new URL(urlStr);
         return (
           u.hostname.endsWith("cloudflarestream.com") &&
           u.pathname.includes("/iframe")
@@ -129,11 +159,19 @@
       }
     }
 
-    function cloudflareToHls(urlStr) {
-      const u = new URL(urlStr, location.href);
+    function cloudflareToIds(urlStr) {
+      const u = new URL(urlStr);
       const parts = u.pathname.split("/").filter(Boolean);
       const videoId = parts[0];
-      return { videoId, hls: `${u.origin}/${videoId}/manifest/video.m3u8` };
+      return { videoId, origin: u.origin };
+    }
+
+    function hlsUrlFor(origin, videoId) {
+      return `${origin}/${videoId}/manifest/video.m3u8`;
+    }
+
+    function posterUrlFor(origin, videoId) {
+      return `${origin}/${videoId}/thumbnails/thumbnail.jpg?time=1s`;
     }
 
     function setControlsVisible(video, visible) {
@@ -160,6 +198,7 @@
       if (currentPlaying && currentPlaying !== video) {
         try {
           if (!currentPlaying.paused && !currentPlaying.ended) {
+            log("Pausing previous playing video");
             currentPlaying.pause();
           }
         } catch (e) {}
@@ -168,10 +207,6 @@
 
     function wirePlayButton(slide, video) {
       const btn = slide.querySelector(BTN_SELECTOR);
-
-      // Start muted for faster/smoother user-gesture play on mobile.
-      // We unmute AFTER playback begins (still within user gesture path).
-      video.muted = true;
 
       setControlsVisible(video, false);
       showBtn(btn);
@@ -222,12 +257,6 @@
         pauseOtherIfNeeded(video);
         currentPlaying = video;
 
-        // If playback successfully started, unmute
-        // (some browsers may still keep it muted; that's fine)
-        try {
-          video.muted = false;
-        } catch (e) {}
-
         hideBtn(slide.querySelector(BTN_SELECTOR));
         setControlsVisible(video, true);
       });
@@ -236,17 +265,12 @@
         showBtn(slide.querySelector(BTN_SELECTOR));
         setControlsVisible(video, false);
 
-        // Return to muted state so next play is smooth
-        video.muted = true;
-
         if (currentPlaying === video) currentPlaying = null;
       });
 
       video.addEventListener("ended", () => {
         showBtn(slide.querySelector(BTN_SELECTOR));
         setControlsVisible(video, false);
-
-        video.muted = true;
 
         if (currentPlaying === video) currentPlaying = null;
       });
@@ -262,11 +286,9 @@
         }
       };
 
-      if (!video._btnObserver2) {
-        const localObs = new MutationObserver(() => refreshUI());
-        localObs.observe(slide, { childList: true, subtree: true });
-        video._btnObserver2 = localObs;
-      }
+      const localObs = new MutationObserver(() => refreshUI());
+      localObs.observe(slide, { childList: true, subtree: true });
+      video._btnObserver2 = localObs;
 
       refreshUI();
     }
@@ -275,6 +297,8 @@
       const canNative =
         videoEl.canPlayType("application/vnd.apple.mpegurl") ||
         videoEl.canPlayType("application/x-mpegURL");
+
+      log("Init video", { videoId, hlsUrl, nativeHls: !!canNative });
 
       if (canNative) {
         videoEl.src = hlsUrl;
@@ -285,9 +309,6 @@
         log("Hls.js not supported in this browser.", videoEl);
         return;
       }
-
-      // Avoid double-attaching HLS if LF re-renders
-      if (videoEl._hlsInstance2) return;
 
       const hls = new Hls({
         enableWorker: true,
@@ -304,71 +325,33 @@
       videoEl._hlsInstance2 = hls;
     }
 
-    function ensureVideoInSlide(slide, hlsUrl, videoId, placeholderIframe) {
+    function ensureVideoInSlide(slide, origin, videoId) {
       if (slide.getAttribute(PROCESSED_ATTR) === "1") return;
+
+      const hlsUrl = hlsUrlFor(origin, videoId);
+      const posterUrl = posterUrlFor(origin, videoId);
 
       let video = slide.querySelector(`video.${VIDEO_CLASS}`);
       if (!video) {
         video = document.createElement("video");
         video.className = VIDEO_CLASS;
         video.setAttribute("playsinline", "");
-        video.setAttribute("preload", "metadata"); // keep light for all slides
+        video.setAttribute("preload", "metadata");
+        video.setAttribute("poster", posterUrl);
+        video.muted = false;
         video.style.width = "100%";
         video.style.height = "100%";
-        video.style.objectFit = "cover";
-        // start muted (will unmute on play)
-        video.muted = true;
-
         slide.prepend(video);
+      } else {
+        if (!video.getAttribute("poster")) video.setAttribute("poster", posterUrl);
       }
 
       setControlsVisible(video, false);
 
-      // Initialize HLS now (you can later optimize to only init on active slide)
       initHls(video, hlsUrl, videoId);
-
-      // Keep iframe as visual placeholder until the video has a frame
-      if (placeholderIframe && !video.dataset.iframeSwapAttached2) {
-        video.dataset.iframeSwapAttached2 = "1";
-
-        const swap = () => {
-          try {
-            placeholderIframe.style.display = "none";
-            setTimeout(() => {
-              try {
-                placeholderIframe.remove();
-              } catch (e) {}
-            }, 250);
-          } catch (e) {}
-        };
-
-        // When the browser has decoded enough to show first frame
-        video.addEventListener("loadeddata", swap, { once: true });
-
-        // Safety: if loadeddata doesn't fire (network issues), don't keep forever
-        setTimeout(() => {
-          if (
-            placeholderIframe.isConnected &&
-            (video.readyState >= 2 || video.currentTime > 0)
-          ) {
-            swap();
-          }
-        }, 4000);
-      }
-
       wirePlayButton(slide, video);
 
       slide.setAttribute(PROCESSED_ATTR, "1");
-    }
-
-    // Debounced processing to reduce expensive rescans
-    let rafId = 0;
-    function scheduleProcess(root) {
-      if (rafId) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = 0;
-        processSlides(root || document);
-      });
     }
 
     function processSlides(root = document) {
@@ -376,7 +359,6 @@
       if (!slides.length) return;
 
       slides.forEach((slide) => {
-        // If already processed, just re-wire button in case LF re-rendered it
         if (slide.getAttribute(PROCESSED_ATTR) === "1") {
           const video = slide.querySelector(`video.${VIDEO_CLASS}`);
           if (video) wirePlayButton(slide, video);
@@ -389,10 +371,16 @@
         const src = iframe.getAttribute("src") || "";
         if (!isCloudflareStreamIframe(src)) return;
 
-        const { videoId, hls } = cloudflareToHls(src);
+        const { videoId, origin } = cloudflareToIds(src);
+        const hls = hlsUrlFor(origin, videoId);
 
-        // IMPORTANT: do NOT hide/remove iframe yet — keep as placeholder
-        ensureVideoInSlide(slide, hls, videoId, iframe);
+        ensurePreconnect(origin);
+
+        log("Found Cloudflare iframe in slide", { videoId, src, hls });
+
+        iframe.style.display = "none";
+        ensureVideoInSlide(slide, origin, videoId);
+        iframe.remove();
       });
     }
 
@@ -403,14 +391,19 @@
     }
 
     const obs = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const n of m.addedNodes) {
-          if (n.nodeType === 1) {
-            // Only process within the newly added subtree (faster)
-            scheduleProcess(n);
-          }
-        }
-      }
+      const relevant = mutations.some((m) =>
+        [...m.addedNodes].some(
+          (n) =>
+            n.nodeType === 1 &&
+            (n.matches?.(SLIDE_SELECTOR) ||
+              n.querySelector?.(SLIDE_SELECTOR) ||
+              n.matches?.("iframe") ||
+              n.querySelector?.("iframe") ||
+              n.matches?.(BTN_SELECTOR) ||
+              n.querySelector?.(BTN_SELECTOR))
+        )
+      );
+      if (relevant) processSlides();
     });
 
     obs.observe(document.documentElement, { childList: true, subtree: true });
