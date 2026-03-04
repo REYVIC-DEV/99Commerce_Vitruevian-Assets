@@ -61,6 +61,7 @@
 
 <script>
   function initPdpSliderVid2() {
+    if (!window.Swiper) return;
     const el = document.querySelector(".pdp-slider-vid-2");
     if (!el || el.classList.contains("swiper-initialized")) return;
 

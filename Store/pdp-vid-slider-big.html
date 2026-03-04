@@ -40,6 +40,7 @@
 
 <script>
   function initPdpSliderVidBig() {
+    if (!window.Swiper) return;
     const el = document.querySelector(".pdp-slider-vid-big");
     if (!el || el.classList.contains("swiper-initialized")) return;
 
@@ -92,7 +93,6 @@
   });
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 (() => {
   // =========================

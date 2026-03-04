@@ -5,6 +5,8 @@
 </style>
 <script>
   function initFourClinicSlider() {
+    if (!window.Swiper) return;
+
     const el = document.querySelector(".four-clinic-slider");
     if (!el || el.classList.contains("swiper-initialized")) return;
 

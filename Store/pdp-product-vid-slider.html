@@ -55,6 +55,7 @@
 
 <script>
   function initPdpSliderVid() {
+    if (!window.Swiper) return;
     const el = document.querySelector(".pdp-slider-vid");
     if (!el || el.classList.contains("swiper-initialized")) return;
 
@@ -105,7 +106,6 @@
   });
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 (() => {
   const SLIDE_SELECTOR = ".pdp-slider-vid .swiper-slide";
