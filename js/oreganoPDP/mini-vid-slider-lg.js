@@ -1,0 +1,353 @@
+  function initPdpSliderVid() {
+    if (!window.Swiper) return;
+    const el = document.querySelector(".pdp-slider-vid");
+    if (!el || el.classList.contains("swiper-initialized")) return;
+
+    // eslint-disable-next-line no-undef
+    const swiper = new Swiper(el, {
+      speed: 400,
+      spaceBetween: 9,
+      slidesPerView: "auto",
+      watchOverflow: true,
+      loop: true,
+      centerInsufficientSlides: true,
+      centeredSlidesBounds: true,
+      observer: true,
+      observeParents: true,
+      pagination: {
+        el: ".pdp-slider-vid-pagination",
+        type: "progressbar",
+        clickable: true,
+      },
+      on: {
+        slideChangeTransitionStart() {
+          // Pause all videos when slide changes (prevents multiple audio streams)
+          document
+            .querySelectorAll(".pdp-slider-vid video.lf-hls-video")
+            .forEach((v) => {
+              try {
+                v.pause();
+              } catch (e) {}
+            });
+        },
+      },
+    });
+
+    // store if you want later: el._pdpSwiper = swiper;
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(initPdpSliderVid, 300);
+  });
+
+  const pdpSliderVidObserver = new MutationObserver(function () {
+    initPdpSliderVid();
+  });
+
+  pdpSliderVidObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+// 
+// 
+// 
+// 
+// 
+// 
+// HLS Video Processor
+(() => {
+  const SLIDE_SELECTOR = ".pdp-slider-vid .swiper-slide";
+  const IFRAME_SELECTOR = "iframe";
+  const VIDEO_CLASS = "lf-hls-video";
+  const PROCESSED_ATTR = "data-hls-processed";
+  const BTN_SELECTOR = ".play-button-pdp";
+
+  const PRECONNECT_ATTR = "data-lf-preconnect-cfstream-1";
+
+  // Track currently playing video (within this slider)
+  let currentPlaying = null;
+
+
+  function ensurePreconnect(originUrl) {
+    try {
+      const root = document.documentElement;
+      if (root.getAttribute(PRECONNECT_ATTR) === "1") return;
+      root.setAttribute(PRECONNECT_ATTR, "1");
+
+      const u = new URL(originUrl);
+      const origin = u.origin;
+
+      const add = (rel, href, cross) => {
+        if (document.head.querySelector(`link[rel="${rel}"][href="${href}"]`))
+          return;
+        const link = document.createElement("link");
+        link.rel = rel;
+        link.href = href;
+        if (cross) link.crossOrigin = "anonymous";
+        document.head.appendChild(link);
+      };
+
+      add("preconnect", origin, true);
+      add("dns-prefetch", origin, false);
+    } catch (e) {}
+  }
+
+  function isCloudflareStreamIframe(urlStr) {
+    try {
+      const u = new URL(urlStr);
+      return (
+        u.hostname.endsWith("cloudflarestream.com") &&
+        u.pathname.includes("/iframe")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function cloudflareToIds(urlStr) {
+    const u = new URL(urlStr);
+    const parts = u.pathname.split("/").filter(Boolean); // /<videoId>/iframe
+    const videoId = parts[0];
+    return { videoId, origin: u.origin };
+  }
+
+  function hlsUrlFor(origin, videoId) {
+    return `${origin}/${videoId}/manifest/video.m3u8`;
+  }
+
+  function posterUrlFor(origin, videoId) {
+    return `${origin}/${videoId}/thumbnails/thumbnail.jpg?time=1s`;
+  }
+
+  function setControlsVisible(video, visible) {
+    if (visible) video.setAttribute("controls", "");
+    else video.removeAttribute("controls");
+  }
+
+  function showBtn(btn) {
+    if (!btn) return;
+    btn.hidden = false;
+    btn.style.display = "";
+    btn.style.pointerEvents = "auto";
+    btn.style.opacity = "1";
+  }
+
+  function hideBtn(btn) {
+    if (!btn) return;
+    btn.hidden = true;
+    btn.style.pointerEvents = "none";
+    btn.style.opacity = "0";
+  }
+
+  function pauseOtherIfNeeded(video) {
+    if (currentPlaying && currentPlaying !== video) {
+      try {
+        if (!currentPlaying.paused && !currentPlaying.ended) {
+          currentPlaying.pause();
+        }
+      } catch (e) {}
+    }
+  }
+
+  function wirePlayButton(slide, video) {
+    const btn = slide.querySelector(BTN_SELECTOR);
+
+    // Initial UI (paused)
+    setControlsVisible(video, false);
+    showBtn(btn);
+
+    if (video.dataset.btnWired === "1") return;
+    video.dataset.btnWired = "1";
+
+    const playWithExclusivity = async () => {
+      pauseOtherIfNeeded(video);
+      try {
+        await video.play();
+      } catch (e) {
+      }
+    };
+
+    const toggle = async () => {
+      try {
+        if (video.paused || video.ended) {
+          await playWithExclusivity();
+        } else {
+          video.pause();
+        }
+      } catch (e) {
+      }
+    };
+
+    if (btn && btn.dataset.listenerAttached !== "1") {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle();
+      });
+      btn.dataset.listenerAttached = "1";
+    }
+
+    // Click-to-play only when paused (controls hidden)
+    if (video.dataset.videoClickAttached !== "1") {
+      video.addEventListener("click", () => {
+        const controlsVisible = video.hasAttribute("controls");
+        if (controlsVisible) return;
+        toggle();
+      });
+      video.dataset.videoClickAttached = "1";
+    }
+
+    // Enforce exclusivity even if play happens via native controls
+    video.addEventListener("play", () => {
+      pauseOtherIfNeeded(video);
+      currentPlaying = video;
+
+      hideBtn(slide.querySelector(BTN_SELECTOR));
+      setControlsVisible(video, true);
+    });
+
+    video.addEventListener("pause", () => {
+      showBtn(slide.querySelector(BTN_SELECTOR));
+      setControlsVisible(video, false);
+
+      if (currentPlaying === video) currentPlaying = null;
+    });
+
+    video.addEventListener("ended", () => {
+      showBtn(slide.querySelector(BTN_SELECTOR));
+      setControlsVisible(video, false);
+
+      if (currentPlaying === video) currentPlaying = null;
+    });
+
+    const refreshUI = () => {
+      const freshBtn = slide.querySelector(BTN_SELECTOR);
+      if (video.paused || video.ended) {
+        setControlsVisible(video, false);
+        showBtn(freshBtn);
+      } else {
+        setControlsVisible(video, true);
+        hideBtn(freshBtn);
+      }
+    };
+
+    const localObs = new MutationObserver(() => refreshUI());
+    localObs.observe(slide, { childList: true, subtree: true });
+    video._btnObserver = localObs;
+
+    refreshUI();
+  }
+
+  function initHls(videoEl, hlsUrl, videoId) {
+    const canNative =
+      videoEl.canPlayType("application/vnd.apple.mpegurl") ||
+      videoEl.canPlayType("application/x-mpegURL");
+
+
+    if (canNative) {
+      videoEl.src = hlsUrl;
+      return;
+    }
+
+    if (!window.Hls || !window.Hls.isSupported()) {
+      return;
+    }
+
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+    });
+
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(videoEl);
+
+    hls.on(Hls.Events.ERROR, (event, data) => {
+    });
+
+    videoEl._hlsInstance = hls;
+  }
+
+  function ensureVideoInSlide(slide, origin, videoId) {
+    if (slide.getAttribute(PROCESSED_ATTR) === "1") return;
+
+    const hlsUrl = hlsUrlFor(origin, videoId);
+    const posterUrl = posterUrlFor(origin, videoId);
+
+    let video = slide.querySelector(`video.${VIDEO_CLASS}`);
+    if (!video) {
+      video = document.createElement("video");
+      video.className = VIDEO_CLASS;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("preload", "metadata");
+      video.setAttribute("poster", posterUrl);
+      video.muted = false;
+      video.style.width = "100%";
+      video.style.height = "100%";
+      slide.prepend(video);
+    } else {
+      if (!video.getAttribute("poster")) video.setAttribute("poster", posterUrl);
+    }
+
+    setControlsVisible(video, false);
+
+    initHls(video, hlsUrl, videoId);
+    wirePlayButton(slide, video);
+
+    slide.setAttribute(PROCESSED_ATTR, "1");
+  }
+
+  function processSlides(root = document) {
+    const slides = root.querySelectorAll(SLIDE_SELECTOR);
+    if (!slides.length) return;
+
+    slides.forEach((slide) => {
+      if (slide.getAttribute(PROCESSED_ATTR) === "1") {
+        const video = slide.querySelector(`video.${VIDEO_CLASS}`);
+        if (video) wirePlayButton(slide, video);
+        return;
+      }
+
+      const iframe = slide.querySelector(IFRAME_SELECTOR);
+      if (!iframe) return;
+
+      const src = iframe.getAttribute("src") || "";
+      if (!isCloudflareStreamIframe(src)) return;
+
+      const { videoId, origin } = cloudflareToIds(src);
+      const hls = hlsUrlFor(origin, videoId);
+
+      ensurePreconnect(origin);
+
+
+      iframe.style.display = "none";
+      ensureVideoInSlide(slide, origin, videoId);
+      iframe.remove();
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => processSlides());
+  } else {
+    processSlides();
+  }
+
+  const obs = new MutationObserver((mutations) => {
+    const relevant = mutations.some((m) =>
+      [...m.addedNodes].some(
+        (n) =>
+          n.nodeType === 1 &&
+          (n.matches?.(SLIDE_SELECTOR) ||
+            n.querySelector?.(SLIDE_SELECTOR) ||
+            n.matches?.("iframe") ||
+            n.querySelector?.("iframe") ||
+            n.matches?.(BTN_SELECTOR) ||
+            n.querySelector?.(BTN_SELECTOR))
+      )
+    );
+    if (relevant) processSlides();
+  });
+
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+
+})();
