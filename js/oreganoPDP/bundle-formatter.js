@@ -1,0 +1,178 @@
+(function () {
+
+  const BUNDLE_ROOTS = ["the-bundles", "the-bundles-2"];
+
+  /* 
+     Keyword-based configuration.
+     If the bundle title contains the keyword (case-insensitive),
+     it will match.
+  */
+  const CONFIG = [
+    {
+      match: "1-person",
+      icon: "https://assets.lightfunnels.com/cdn-cgi/image/width=57,height=57,fit=cover,quality=80,format=auto/https://assets.lightfunnels.com/account-90380/images_library/64a8f9d1-eb12-40b5-b197-7b590bdb20de.430250701640ec432ae870fc1363bd81a46c6215.png",
+      subtitle: "2 Parasite Reset Protocols for 1 person.",
+      badge: "30% OFF"
+    },
+    {
+      match: "2-person",
+      icon: "https://assets.lightfunnels.com/cdn-cgi/image/width=57,height=57,fit=cover,quality=80,format=auto/https://assets.lightfunnels.com/account-90380/images_library/3fe63436-309b-496e-ab1e-4c29a98b8b0c.523660691170cf7b9214f4273353e8d125b824f2.png",
+      subtitle: "2 full protocols each for 2 adults.",
+      badge: "40% OFF"
+    },
+    {
+      match: "family",
+      icon: "https://assets.lightfunnels.com/cdn-cgi/image/width=57,height=57,fit=cover,quality=80,format=auto/https://assets.lightfunnels.com/account-90380/images_library/a5a21d42-cfe1-41b5-8c02-6dad4c87e3cb.23514ef644c592949a62f84a5344138c1e80e031.png",
+      subtitle: "Up to 8 full parasite protocols per household.",
+      badge: "50% OFF"
+    }
+  ];
+
+  function norm(s) {
+    return (s || "")
+      .replace(/\u2011|\u2013|\u2014/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function findConfig(title) {
+    const lower = title.toLowerCase();
+    return CONFIG.find(c => lower.includes(c.match)) || null;
+  }
+
+  /* ---------- Lazy Loader ---------- */
+
+  const IO_SUPPORTED = "IntersectionObserver" in window;
+  let io = null;
+
+  function ensureIO() {
+    if (!IO_SUPPORTED || io) return;
+    io = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const img = entry.target;
+        const src = img.getAttribute("data-src");
+        if (src) img.src = src;
+        img.removeAttribute("data-src");
+        io.unobserve(img);
+      });
+    }, { rootMargin: "250px 0px", threshold: 0.01 });
+  }
+
+  function registerLazy(img, src) {
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.setAttribute("fetchpriority", "low");
+
+    img.setAttribute("data-src", src);
+
+    if (IO_SUPPORTED) {
+      ensureIO();
+      io.observe(img);
+    } else {
+      img.src = src;
+      img.removeAttribute("data-src");
+    }
+  }
+
+  /* ---------------------------------- */
+
+  function enhanceContainer(container) {
+    if (!container) return;
+
+    const titleSpans = container.querySelectorAll("span.n0NQf");
+
+    titleSpans.forEach(titleSpan => {
+      const row = titleSpan.parentElement;
+      if (!row) return;
+      if (row.dataset.lfProcessed === "1") return;
+
+      const titleText = norm(titleSpan.textContent);
+      const config = findConfig(titleText);
+
+      // 🚨 Only process if config found
+      if (!config) return;
+
+      row.dataset.lfProcessed = "1";
+
+      // Hide native radio
+      const prev = titleSpan.previousElementSibling;
+      if (prev) prev.setAttribute("data-lf-hide", "radio");
+
+      // Insert icon
+      const img = document.createElement("img");
+      img.setAttribute("data-lf-icon", "1");
+      img.alt = titleText + " icon";
+
+      // Explicit dimensions (fix CLS)
+      img.width = 57;
+      img.height = 57;
+      img.style.width = "57px";
+      img.style.height = "57px";
+      img.style.objectFit = "cover";
+
+      registerLazy(img, config.icon);
+
+      row.insertBefore(img, titleSpan);
+
+      // Create title column
+      const wrap = document.createElement("div");
+      wrap.setAttribute("data-lf-titlewrap", "1");
+
+      const titleRow = document.createElement("div");
+      titleRow.setAttribute("data-lf-title-row", "1");
+
+      const t = document.createElement("span");
+      t.setAttribute("data-lf-title", "1");
+      t.textContent = titleText;
+      titleRow.appendChild(t);
+
+      if (config.badge) {
+        const badge = document.createElement("span");
+        badge.setAttribute("data-lf-percent-off", "1");
+        badge.textContent = config.badge;
+        titleRow.appendChild(badge);
+      }
+
+      const subtitle = document.createElement("span");
+      subtitle.setAttribute("data-lf-subtitle", "1");
+      subtitle.textContent = config.subtitle || "";
+
+      wrap.appendChild(titleRow);
+      wrap.appendChild(subtitle);
+
+      titleSpan.replaceWith(wrap);
+
+      const cs = window.getComputedStyle(row);
+      if (cs.display !== "flex") {
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+      }
+    });
+  }
+
+  function enhanceAll() {
+    BUNDLE_ROOTS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) enhanceContainer(el);
+    });
+  }
+
+  function schedule() {
+    clearTimeout(window.__lfBundlesTO);
+    window.__lfBundlesTO = setTimeout(enhanceAll, 50);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", schedule);
+  } else {
+    schedule();
+  }
+
+  const observer = new MutationObserver(schedule);
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true
+  });
+
+})();
