@@ -1,0 +1,139 @@
+(function () {
+  const PAIRS = [
+    { bundlesId: "the-bundles",   btnId: "add-to-cart-1" },
+    { bundlesId: "the-bundles-2", btnId: "add-to-cart-2" },
+  ];
+
+  function readText(el) {
+    return (el && el.textContent ? el.textContent : "").trim();
+  }
+
+  function normalizeMoney(s) {
+    const t = (s || "").trim().replace(/\s+/g, "");
+    if (!t) return null;
+    return t.startsWith("$") ? t : ("$" + t.replace(/^\$/, ""));
+  }
+
+  function getActiveCard(root) {
+    if (!root) return null;
+    return root.querySelector(".active") || root.querySelector("[aria-checked='true']");
+  }
+
+  function extractMoney(active) {
+    if (!active) return { price: null, compare: null };
+
+    // Prefer your current structure
+    const priceEl = active.querySelector(".LyYxP");
+    const compareEl = active.querySelector(".hYUmS");
+    const price1 = normalizeMoney(readText(priceEl));
+    const compare1 = normalizeMoney(readText(compareEl));
+    if (price1) return { price: price1, compare: compare1 };
+
+    // Fallback: first two leaf nodes that look like money
+    const re = /^\$?\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})\s*$/;
+    const all = active.querySelectorAll("*");
+    const found = [];
+    for (const el of all) {
+      if (el.children && el.children.length) continue;
+      const t = readText(el);
+      if (re.test(t)) {
+        found.push(normalizeMoney(t));
+        if (found.length >= 2) break;
+      }
+    }
+    return { price: found[0] || null, compare: found[1] || null };
+  }
+
+  function setButton(btn, price, compare) {
+    if (!btn || !price) return false;
+
+    // IMPORTANT: idempotent update (no DOM write if nothing changed)
+    const key = price + "|" + (compare || "");
+    if (btn.dataset.lfDynAtcKey === key) return true;
+    btn.dataset.lfDynAtcKey = key;
+
+    btn.innerHTML =
+      `<span data-lf-dyn-atc="1">` +
+        `<span data-lf-dyn-label="1">Add to Cart</span>` +
+        `<span data-lf-dyn-sep="1">|</span>` +
+        `<span data-lf-dyn-price="1">${price}</span>` +
+        (compare ? `<span data-lf-dyn-compare="1">${compare}</span>` : ``) +
+      `</span>`;
+
+    return true;
+  }
+
+  function updatePair(pair) {
+    const bundlesRoot = document.getElementById(pair.bundlesId);
+    const btn = document.getElementById(pair.btnId);
+    if (!bundlesRoot || !btn) return false;
+
+    const active = getActiveCard(bundlesRoot);
+    if (!active) return false;
+
+    const { price, compare } = extractMoney(active);
+    return setButton(btn, price, compare);
+  }
+
+  let raf = 0;
+  function scheduleUpdate() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      PAIRS.forEach(updatePair);
+    });
+  }
+
+  // Retry on load until bundles render, but do NOT cause constant mutations
+  function updateUntilReady() {
+    const start = Date.now();
+    const MAX_MS = 8000;
+    const INTERVAL = 120;
+
+    const t = setInterval(() => {
+      let updatedAny = false;
+      for (const p of PAIRS) updatedAny = updatePair(p) || updatedAny;
+
+      // stop once we’ve successfully updated at least one existing button
+      if (updatedAny) clearInterval(t);
+      if (Date.now() - start > MAX_MS) clearInterval(t);
+    }, INTERVAL);
+  }
+
+  function initObservers() {
+    // On clicks (bundle selection)
+    document.addEventListener("click", function () {
+      setTimeout(scheduleUpdate, 0);
+    }, true);
+
+    // Observe ONLY the bundle roots (NOT documentElement), so we don’t fight your enhancer observer
+    PAIRS.forEach(pair => {
+      const root = document.getElementById(pair.bundlesId);
+      if (!root) return;
+
+      const mo = new MutationObserver(() => {
+        // schedule (idempotent) update
+        scheduleUpdate();
+      });
+
+      mo.observe(root, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["class", "aria-checked"]
+      });
+    });
+  }
+
+  function init() {
+    scheduleUpdate();
+    updateUntilReady();
+    initObservers();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
