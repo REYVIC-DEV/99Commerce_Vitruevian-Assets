@@ -1,0 +1,249 @@
+<script src="https://cdn.jsdelivr.net/npm/swiper@12/swiper-bundle.min.js" defer >
+
+</script> <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" defer></script>
+
+
+<script>
+(function () {
+
+  /* ---------------------------
+  1. Judge.me configuration
+  --------------------------- */
+
+  window.jdgm = window.jdgm || {};
+  window.jdgm.SHOP_DOMAIN = "99brands1.myshopify.com";
+  window.jdgm.PLATFORM = "shopify";
+  window.jdgm.PUBLIC_TOKEN = "Ol224LN84BU5YZ8InSpr9XVXA34";
+
+  const WIDGET_SRC = "https://cdnwidget.judge.me/widget_preloader.js";
+  const WIDGET_HOST = "https://cdnwidget.judge.me";
+
+
+
+  /* ---------------------------
+  2. Network performance hints
+  --------------------------- */
+
+  function addHint(tag, attrs) {
+    try {
+      const el = document.createElement(tag);
+      Object.keys(attrs).forEach(k => el.setAttribute(k, attrs[k]));
+      document.head.appendChild(el);
+    } catch(e){}
+  }
+
+  addHint("link",{rel:"preconnect",href:WIDGET_HOST,crossorigin:""});
+  addHint("link",{rel:"dns-prefetch",href:WIDGET_HOST});
+
+
+
+  /* ---------------------------
+  3. Wait for element helper
+  --------------------------- */
+
+  function waitForEl(selector, timeout = 15000) {
+
+    const start = Date.now();
+
+    return new Promise((resolve,reject)=>{
+
+      (function check(){
+
+        const el = document.querySelector(selector);
+
+        if(el) return resolve(el);
+
+        if(Date.now()-start > timeout)
+          return reject("timeout");
+
+        setTimeout(check,60);
+
+      })();
+
+    });
+
+  }
+
+
+
+  /* ---------------------------
+  4. Load Judge.me script once
+  --------------------------- */
+
+  function loadJdgm(){
+
+    return new Promise(resolve=>{
+
+      const existing =
+        document.querySelector('script[data-lf-jdgm="1"]') ||
+        document.querySelector('script[src*="judge.me/widget_preloader.js"]');
+
+      if(existing) return resolve();
+
+      const s = document.createElement("script");
+
+      s.src = WIDGET_SRC;
+      s.async = true;
+      s.defer = true;
+
+      s.setAttribute("data-lf-jdgm","1");
+      s.setAttribute("data-cfasync","false");
+
+      s.onload = resolve;
+
+      document.head.appendChild(s);
+
+    });
+
+  }
+
+
+
+  /* ---------------------------
+  5. Debounced widget render
+  --------------------------- */
+
+  let renderTimer;
+
+  function renderJdgm(){
+
+    clearTimeout(renderTimer);
+
+    renderTimer = setTimeout(()=>{
+
+      if(!window.jdgm) return;
+
+      if(typeof jdgm.refreshWidgets === "function")
+        jdgm.refreshWidgets();
+
+      else if(typeof jdgm.renderWidgets === "function")
+        jdgm.renderWidgets();
+
+    },150);
+
+  }
+
+
+
+  /* ---------------------------
+  6. Lazy load when widget visible
+  --------------------------- */
+
+  function lazyLoadReviews(){
+
+    const el = document.querySelector(".jdgm-widget");
+
+    if(!el) return;
+
+    const observer = new IntersectionObserver(entries=>{
+
+      if(entries[0].isIntersecting){
+
+        loadJdgm().then(renderJdgm);
+
+        observer.disconnect();
+
+      }
+
+    },{rootMargin:"400px"});
+
+    observer.observe(el);
+
+  }
+
+
+
+  /* ---------------------------
+  7. Start loader
+  --------------------------- */
+
+  function start(){
+
+    function init(){
+
+      lazyLoadReviews();
+
+    }
+
+    if("requestIdleCallback" in window)
+      requestIdleCallback(init,{timeout:2000});
+    else
+      setTimeout(init,1200);
+
+    waitForEl(".jdgm-widget")
+      .then(renderJdgm)
+      .catch(()=>{});
+
+  }
+
+
+
+  if(document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded",start,{once:true});
+  else
+    start();
+
+
+
+  /* ---------------------------
+  8. React / Lightfunnels rerender support
+  --------------------------- */
+
+  const root = document.getElementById("root") || document.body;
+
+  const mo = new MutationObserver(()=>{
+
+    if(document.querySelector(".jdgm-widget"))
+      renderJdgm();
+
+  });
+
+  mo.observe(root,{
+    childList:true,
+    subtree:true
+  });
+
+})();
+</script>
+
+
+
+<script>
+(function(){
+
+  function ensureMainLandmark(){
+
+    const root = document.getElementById("root");
+
+    if(!root) return;
+
+    if(root.querySelector("main,[role='main']")) return;
+
+    const first = Array.from(root.children).find(
+      el => el.tagName !== "SCRIPT" && el.tagName !== "STYLE"
+    );
+
+    if(first)
+      first.setAttribute("role","main");
+
+  }
+
+  window.addEventListener("load",ensureMainLandmark);
+
+})();
+</script>
+
+
+
+<style>
+@keyframes animateToastList {
+  0% {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+</style>
