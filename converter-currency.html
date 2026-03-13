@@ -1,0 +1,156 @@
+<script>
+(function(){
+
+const BASE = "USD";
+const CACHE_KEY = "lf_currency_cache";
+const CACHE_TIME = 6 * 60 * 60 * 1000;
+const RATE_BUFFER = 1.003;
+
+const MODE = "limited";
+
+const SUPPORTED_CURRENCIES = [
+"AED","AUD","EUR","GBP","HKD","MXN","NZD","SGD","USD","ZAR","CAD"
+];
+
+function resolveCurrency(currency){
+  if(MODE === "all") return currency;
+  if(SUPPORTED_CURRENCIES.includes(currency)) return currency;
+  return BASE;
+}
+
+async function getCurrencyData(){
+
+  const geo = await fetch("https://ipapi.co/json/");
+  const geoData = await geo.json();
+
+  const detectedCurrency = geoData.currency || BASE;
+  const currency = resolveCurrency(detectedCurrency);
+
+  const cached = localStorage.getItem(CACHE_KEY);
+
+  if(cached){
+    const data = JSON.parse(cached);
+    if(data.currency === currency && Date.now() - data.time < CACHE_TIME){
+      return data;
+    }
+  }
+
+  let rate = 1;
+
+  if(currency !== BASE){
+
+    const rateRes = await fetch(
+      `https://api.frankfurter.app/latest?from=${BASE}&to=${currency}`
+    );
+
+    const rateData = await rateRes.json();
+
+    const rawRate = rateData.rates[currency] || 1;
+
+    rate = rawRate * RATE_BUFFER;
+  }
+
+  const result = { currency, rate, time: Date.now() };
+
+  localStorage.setItem(CACHE_KEY, JSON.stringify(result));
+
+  return result;
+}
+
+function format(value,currency){
+  return new Intl.NumberFormat(undefined,{
+    style:"currency",
+    currency
+  }).format(value);
+}
+
+function parsePrice(text){
+  const num = parseFloat(text.replace(/[^0-9.]/g,""));
+  return Number.isFinite(num) ? num : null;
+}
+
+function convertElement(el,rate,currency){
+
+  const lastCurrency = el.dataset.lfCurrency;
+
+  if(lastCurrency === currency) return;
+
+  const num = parsePrice(el.textContent);
+  if(num === null) return;
+
+  const converted = num * rate;
+
+  el.textContent = format(converted,currency);
+
+  el.dataset.lfCurrency = currency;
+}
+
+function convertCartProtection(rate,currency){
+
+  const node = document.querySelector("#cart-convert p");
+
+  if(!node) return;
+
+  const lastCurrency = node.dataset.lfCurrency;
+  if(lastCurrency === currency) return;
+
+  const match = node.textContent.match(/\$([0-9.]+)/);
+  if(!match) return;
+
+  const value = parseFloat(match[1]);
+
+  const converted = format(value * rate,currency);
+
+  node.textContent =
+    node.textContent.replace(/\$[0-9.]+/, converted);
+
+  node.dataset.lfCurrency = currency;
+}
+
+function convertPrices(rate,currency){
+
+  document
+    .querySelectorAll(".convert-currency span")
+    .forEach(el => convertElement(el,rate,currency));
+
+  convertCartProtection(rate,currency);
+}
+
+async function init(){
+
+  try{
+
+    const data = await getCurrencyData();
+
+    const rate = data.rate;
+    const currency = data.currency;
+
+    convertPrices(rate,currency);
+
+    let observerTimeout;
+
+    const observer = new MutationObserver(()=>{
+
+      clearTimeout(observerTimeout);
+
+      observerTimeout = setTimeout(()=>{
+        convertPrices(rate,currency);
+      },120);
+
+    });
+
+    observer.observe(document.body,{
+      childList:true,
+      subtree:true
+    });
+
+  }catch(e){
+    console.warn("Currency conversion failed",e);
+  }
+
+}
+
+init();
+
+})();
+</script>

@@ -1,0 +1,115 @@
+<script>
+(function () {
+  const ROOT_ID = "the-countdown";
+  const STORAGE_KEY = "lf_reserved_timer_v4_upsell";
+
+  const RUN_MS = 10 * 60 * 1000;        // 10:00
+  const COOLDOWN_MS = 60 * 60 * 1000;  // 1 hour after hitting 0
+  const PREFIX = "Limited time offer ";
+
+  // prevent multiple copies
+  if (window.__LF_RESERVED_TIMER_V4_upsell__) return;
+  window.__LF_RESERVED_TIMER_V4_upsell__ = true;
+
+  function now() { return Date.now(); }
+  function pad2(n){ return n < 10 ? "0" + n : "" + n; }
+  function formatMMSS(ms){
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ":" + pad2(sec);
+  }
+
+  function safeParse(raw){ try { return JSON.parse(raw); } catch { return null; } }
+  function readState(){ return safeParse(localStorage.getItem(STORAGE_KEY)) || null; }
+  function writeState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+  function newRunning(t){ return { phase: "running", endAt: t + RUN_MS, cooldownUntil: null }; }
+
+  function ensureState(){
+    const t = now();
+    let s = readState();
+
+    if (!s || !s.phase) { s = newRunning(t); writeState(s); return s; }
+
+    if (s.phase === "running") {
+      if (typeof s.endAt !== "number") { s = newRunning(t); writeState(s); return s; }
+      if (t >= s.endAt) {
+        s = { phase: "cooldown", endAt: s.endAt, cooldownUntil: s.endAt + COOLDOWN_MS };
+        writeState(s);
+      }
+      return s;
+    }
+
+    if (s.phase === "cooldown") {
+      if (typeof s.cooldownUntil !== "number") {
+        s = { phase: "cooldown", endAt: t, cooldownUntil: t + COOLDOWN_MS };
+        writeState(s);
+        return s;
+      }
+      if (t >= s.cooldownUntil) { s = newRunning(t); writeState(s); }
+      return s;
+    }
+
+    s = newRunning(t); writeState(s); return s;
+  }
+
+  // Use LF's first child element for display (keeps LF styling), and remove any injected duplicate nodes.
+  function getDisplayNode(root){
+    // remove previously injected node (if any) to avoid duplicate lines
+    root.querySelectorAll("[data-lf-countdown='1']").forEach(function(n){
+      n.remove();
+    });
+
+    // Prefer first direct child element (LF typically renders the styled text inside here)
+    const firstChildEl = root.querySelector(":scope > *");
+    if (firstChildEl) return firstChildEl;
+
+    // Fallback: write directly into root
+    return root;
+  }
+
+  let lastText = "";
+  function render(){
+    const root = document.getElementById(ROOT_ID);
+    if (!root) return;
+
+    const s = ensureState();
+    const t = now();
+    const timeText = (s.phase === "running") ? formatMMSS(s.endAt - t) : "0:00";
+    const text = PREFIX + timeText + " minutes";
+
+    const node = getDisplayNode(root);
+
+    if (node.textContent !== text && text !== lastText) {
+      lastText = text;
+      node.textContent = text;
+    }
+  }
+
+  // Debounced rerender to avoid MutationObserver loops
+  let rafPending = false;
+  function scheduleRender(){
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function(){
+      rafPending = false;
+      render();
+    });
+  }
+
+  function start(){
+    if (window.__LF_RESERVED_TIMER_V4_upsell_INTERVAL__) return;
+    render();
+    window.__LF_RESERVED_TIMER_V4_upsell_INTERVAL__ = setInterval(render, 1000);
+  }
+
+  // Only used to recover if LF re-renders and replaces #the-countdown
+  const mo = new MutationObserver(scheduleRender);
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(start, 250);
+  });
+  setTimeout(start, 1200);
+})();
+</script>

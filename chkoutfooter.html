@@ -1,0 +1,294 @@
+<script>
+(function(){
+
+const STORAGE_KEY = "lf_checkout_data";
+
+function getStored(){
+  try{
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  }catch{
+    return {};
+  }
+}
+
+function setStored(data){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+}
+
+function getKey(el){
+
+  if(!el.name) return null;
+
+  if(el.classList.contains("billing")){
+    return "billing." + el.name;
+  }
+
+  return "shipping." + el.name;
+}
+
+function saveField(el){
+
+  const key = getKey(el);
+  if(!key) return;
+
+  const data = getStored();
+
+  data[key] = el.value;
+
+  setStored(data);
+
+}
+
+function restoreField(el){
+
+  const key = getKey(el);
+  if(!key) return;
+
+  const data = getStored();
+
+  if(!(key in data)) return;
+
+  if(!el.value){
+    el.value = data[key];
+  }
+
+  el.dispatchEvent(new Event("input",{bubbles:true}));
+  el.dispatchEvent(new Event("change",{bubbles:true}));
+
+}
+
+function attachField(el){
+
+  if(!el || el.dataset.lfSaved) return;
+
+  el.dataset.lfSaved = "1";
+
+  restoreField(el);
+
+  const handler = ()=>saveField(el);
+
+  el.addEventListener("input",handler);
+  el.addEventListener("change",handler);
+
+}
+
+function captureShippingMethod(){
+
+  const active = document.querySelector("._266 .zsy6s.active");
+  if(!active) return;
+
+  const row = active.closest(".Cq73x");
+  if(!row) return;
+
+  const label = row.querySelector("._271");
+  if(!label) return;
+
+  const data = getStored();
+
+  data.shipping_method = label.textContent.trim();
+
+  setStored(data);
+
+}
+
+function capturePaymentMethod(){
+
+  const active = document.querySelector("#payment-picker .zsy6s.active");
+  if(!active) return;
+
+  const wrapper = active.closest(".SK2Ly");
+  if(!wrapper) return;
+
+  const title = wrapper.querySelector(".b56om");
+  if(!title) return;
+
+  const data = getStored();
+
+  data.payment_method = title.textContent.trim();
+
+  setStored(data);
+
+}
+
+function captureBillingSame(){
+
+  const checkbox = document.querySelector("._209 input[type='checkbox']");
+  if(!checkbox) return;
+
+  const data = getStored();
+
+  data.billing_same = checkbox.checked;
+
+  setStored(data);
+
+}
+
+function attachBillingSame(){
+
+  const checkbox = document.querySelector("._209 input[type='checkbox']");
+  if(!checkbox || checkbox.dataset.lfBound) return;
+
+  checkbox.dataset.lfBound = "1";
+
+  checkbox.addEventListener("change",captureBillingSame);
+
+}
+
+function attachPaymentListener(){
+
+  const root = document.querySelector("#payment-picker");
+  if(!root || root.dataset.lfPayBound) return;
+
+  root.dataset.lfPayBound = "1";
+
+  root.addEventListener("click",()=>{
+    setTimeout(capturePaymentMethod,120);
+  });
+
+}
+
+function scan(){
+
+  const fields = document.querySelectorAll("input[name], select[name], textarea[name]");
+
+  fields.forEach(attachField);
+
+  captureShippingMethod();
+  capturePaymentMethod();
+  captureBillingSame();
+
+  attachBillingSame();
+  attachPaymentListener();
+
+}
+
+const observer = new MutationObserver(scan);
+
+observer.observe(document.documentElement,{
+  childList:true,
+  subtree:true
+});
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded",scan);
+}else{
+  scan();
+}
+
+})();
+</script>
+<script>
+(function () {
+  const ROOT_ID = "the-countdown";
+  const STORAGE_KEY = "lf_reserved_timer_v4";
+
+  const RUN_MS = 7 * 60 * 1000;        // 7:00
+  const COOLDOWN_MS = 60 * 60 * 1000;  // 1 hour after hitting 0
+  const PREFIX = "Due to high demand your order is reserved for: ";
+
+  // prevent multiple copies
+  if (window.__LF_RESERVED_TIMER_V4__) return;
+  window.__LF_RESERVED_TIMER_V4__ = true;
+
+  function now() { return Date.now(); }
+  function pad2(n){ return n < 10 ? "0" + n : "" + n; }
+  function formatMMSS(ms){
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ":" + pad2(sec);
+  }
+
+  function safeParse(raw){ try { return JSON.parse(raw); } catch { return null; } }
+  function readState(){ return safeParse(localStorage.getItem(STORAGE_KEY)) || null; }
+  function writeState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+  function newRunning(t){ return { phase: "running", endAt: t + RUN_MS, cooldownUntil: null }; }
+
+  function ensureState(){
+    const t = now();
+    let s = readState();
+
+    if (!s || !s.phase) { s = newRunning(t); writeState(s); return s; }
+
+    if (s.phase === "running") {
+      if (typeof s.endAt !== "number") { s = newRunning(t); writeState(s); return s; }
+      if (t >= s.endAt) {
+        s = { phase: "cooldown", endAt: s.endAt, cooldownUntil: s.endAt + COOLDOWN_MS };
+        writeState(s);
+      }
+      return s;
+    }
+
+    if (s.phase === "cooldown") {
+      if (typeof s.cooldownUntil !== "number") {
+        s = { phase: "cooldown", endAt: t, cooldownUntil: t + COOLDOWN_MS };
+        writeState(s);
+        return s;
+      }
+      if (t >= s.cooldownUntil) { s = newRunning(t); writeState(s); }
+      return s;
+    }
+
+    s = newRunning(t); writeState(s); return s;
+  }
+
+  // Use LF's first child element for display (keeps LF styling), and remove any injected duplicate nodes.
+  function getDisplayNode(root){
+    // remove previously injected node (if any) to avoid duplicate lines
+    root.querySelectorAll("[data-lf-countdown='1']").forEach(function(n){
+      n.remove();
+    });
+
+    // Prefer first direct child element (LF typically renders the styled text inside here)
+    const firstChildEl = root.querySelector(":scope > *");
+    if (firstChildEl) return firstChildEl;
+
+    // Fallback: write directly into root
+    return root;
+  }
+
+  let lastText = "";
+  function render(){
+    const root = document.getElementById(ROOT_ID);
+    if (!root) return;
+
+    const s = ensureState();
+    const t = now();
+    const timeText = (s.phase === "running") ? formatMMSS(s.endAt - t) : "0:00";
+    const text = PREFIX + timeText + " minutes";
+
+    const node = getDisplayNode(root);
+
+    if (node.textContent !== text && text !== lastText) {
+      lastText = text;
+      node.textContent = text;
+    }
+  }
+
+  // Debounced rerender to avoid MutationObserver loops
+  let rafPending = false;
+  function scheduleRender(){
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function(){
+      rafPending = false;
+      render();
+    });
+  }
+
+  function start(){
+    if (window.__LF_RESERVED_TIMER_V4_INTERVAL__) return;
+    render();
+    window.__LF_RESERVED_TIMER_V4_INTERVAL__ = setInterval(render, 1000);
+  }
+
+  // Only used to recover if LF re-renders and replaces #the-countdown
+  const mo = new MutationObserver(scheduleRender);
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(start, 250);
+  });
+  setTimeout(start, 1200);
+})();
+</script>

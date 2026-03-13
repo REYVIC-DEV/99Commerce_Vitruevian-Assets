@@ -1,0 +1,332 @@
+<script>
+(function () {
+
+  const PRICE_SEL = "#official-price";
+  const BTN_SEL = "#pay-now button div";
+  const QTY_CONTAINER = "#quantity-show";
+  const QTY_INPUT = "#quantity-show input[type='number']";
+  const TOTAL_PRICE_SEL = ".total-price .wys";
+
+  function parsePrice(text) {
+    const currency = text.replace(/[0-9.,]/g, "").trim();
+    const number = parseFloat(text.replace(/[^0-9.]/g, ""));
+    return { currency, number };
+  }
+
+  function formatPrice(currency, value) {
+    return currency + value.toFixed(2);
+  }
+
+  function updatePrices() {
+    const priceEl = document.querySelector(PRICE_SEL);
+    const qtyInput = document.querySelector(QTY_INPUT);
+    const btnText = document.querySelector(BTN_SEL);
+
+    if (!priceEl || !qtyInput) return;
+
+    const qty = parseInt(qtyInput.value || "1", 10);
+
+    const { currency, number } = parsePrice(priceEl.textContent.trim());
+    const total = number * qty;
+    const formatted = formatPrice(currency, total);
+
+    /* Update Pay button */
+    if (btnText) {
+      const desired = "Pay now · " + formatted;
+      if (btnText.textContent !== desired) {
+        btnText.textContent = desired;
+      }
+    }
+
+    /* Update total price elements */
+    document.querySelectorAll(TOTAL_PRICE_SEL).forEach(el => {
+      if (el.textContent !== formatted) {
+        el.textContent = formatted;
+      }
+    });
+  }
+
+  function start() {
+    updatePrices();
+
+    /* React repaint guards */
+    setTimeout(updatePrices, 50);
+    setTimeout(updatePrices, 300);
+
+    /* Listen for quantity clicks */
+    const qtyContainer = document.querySelector(QTY_CONTAINER);
+    if (qtyContainer) {
+      qtyContainer.addEventListener("click", function () {
+        setTimeout(updatePrices, 30);
+      });
+    }
+
+    /* Also detect manual input change */
+    document.addEventListener("input", function(e){
+      if (e.target.matches(QTY_INPUT)) {
+        updatePrices();
+      }
+    });
+
+    /* Safety interval for React hydration */
+    setInterval(updatePrices, 800);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+
+})();
+</script>
+<script>
+(function () {
+  const ROOT_ID = "the-countdown";
+  const STORAGE_KEY = "lf_reserved_timer_v4_upsell";
+
+  const RUN_MS = 10 * 60 * 1000;        // 10:00
+  const COOLDOWN_MS = 0;  // 1 hour after hitting 0
+  const PREFIX = "Limited time offer ";
+
+  // prevent multiple copies
+  if (window.__LF_RESERVED_TIMER_V4_upsell__) return;
+  window.__LF_RESERVED_TIMER_V4_upsell__ = true;
+
+  function now() { return Date.now(); }
+  function pad2(n){ return n < 10 ? "0" + n : "" + n; }
+  function formatMMSS(ms){
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ":" + pad2(sec);
+  }
+
+  function safeParse(raw){ try { return JSON.parse(raw); } catch { return null; } }
+  function readState(){ return safeParse(localStorage.getItem(STORAGE_KEY)) || null; }
+  function writeState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+  function newRunning(t){ return { phase: "running", endAt: t + RUN_MS, cooldownUntil: null }; }
+
+  function ensureState(){
+    const t = now();
+    let s = readState();
+
+    if (!s || !s.phase) { s = newRunning(t); writeState(s); return s; }
+
+    if (s.phase === "running") {
+      if (typeof s.endAt !== "number") { s = newRunning(t); writeState(s); return s; }
+      if (t >= s.endAt) {
+        s = { phase: "cooldown", endAt: s.endAt, cooldownUntil: s.endAt + COOLDOWN_MS };
+        writeState(s);
+      }
+      return s;
+    }
+
+    if (s.phase === "cooldown") {
+      if (typeof s.cooldownUntil !== "number") {
+        s = { phase: "cooldown", endAt: t, cooldownUntil: t + COOLDOWN_MS };
+        writeState(s);
+        return s;
+      }
+      if (t >= s.cooldownUntil) { s = newRunning(t); writeState(s); }
+      return s;
+    }
+
+    s = newRunning(t); writeState(s); return s;
+  }
+
+  // Use LF's first child element for display (keeps LF styling), and remove any injected duplicate nodes.
+  function getDisplayNode(root){
+    // remove previously injected node (if any) to avoid duplicate lines
+    root.querySelectorAll("[data-lf-countdown='1']").forEach(function(n){
+      n.remove();
+    });
+
+    // Prefer first direct child element (LF typically renders the styled text inside here)
+    const firstChildEl = root.querySelector(":scope > *");
+    if (firstChildEl) return firstChildEl;
+
+    // Fallback: write directly into root
+    return root;
+  }
+
+  let lastText = "";
+  function render(){
+    const root = document.getElementById(ROOT_ID);
+    if (!root) return;
+
+    const s = ensureState();
+    const t = now();
+    const timeText = (s.phase === "running") ? formatMMSS(s.endAt - t) : "0:00";
+    const text = PREFIX + timeText + " minutes";
+
+    const node = getDisplayNode(root);
+
+    if (node.textContent !== text && text !== lastText) {
+      lastText = text;
+      node.textContent = text;
+    }
+  }
+
+  // Debounced rerender to avoid MutationObserver loops
+  let rafPending = false;
+  function scheduleRender(){
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function(){
+      rafPending = false;
+      render();
+    });
+  }
+
+  function start(){
+    if (window.__LF_RESERVED_TIMER_V4_upsell_INTERVAL__) return;
+    render();
+    window.__LF_RESERVED_TIMER_V4_upsell_INTERVAL__ = setInterval(render, 1000);
+  }
+
+  // Only used to recover if LF re-renders and replaces #the-countdown
+  const mo = new MutationObserver(scheduleRender);
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(start, 250);
+  });
+  setTimeout(start, 1200);
+})();
+</script>
+
+<script>
+
+  // 1) Configure Judge.me
+  window.jdgm = window.jdgm || {};
+  window.jdgm.SHOP_DOMAIN = "99brands1.myshopify.com";
+  window.jdgm.PLATFORM = "shopify";
+  window.jdgm.PUBLIC_TOKEN = "Ol224LN84BU5YZ8InSpr9XVXA34";
+
+  // 2) Helper: wait for an element (React hydration-safe)
+  function waitForEl(selector, timeoutMs) {
+
+    timeoutMs = timeoutMs || 10000;
+    var start = Date.now();
+
+    return new Promise(function (resolve, reject) {
+
+      (function tick() {
+
+        var el = document.querySelector(selector);
+
+        if (el) return resolve(el);
+
+        if (Date.now() - start > timeoutMs) {
+          return reject(new Error("Timeout: " + selector));
+        }
+
+        setTimeout(tick, 100);
+
+      })();
+
+    });
+  }
+
+  // 3) Load Judge.me script once (if not already loaded)
+  function loadJdgm() {
+
+    return new Promise(function (resolve) {
+
+      var existing = document.querySelector(
+        'script[src*="judge.me/widget_preloader.js"]'
+      );
+
+      if (existing) return resolve();
+
+      var s = document.createElement("script");
+      s.src = "https://cdnwidget.judge.me/widget_preloader.js";
+      s.async = true;
+      s.setAttribute("data-cfasync", "false");
+
+      s.onload = function () {
+        resolve();
+      };
+
+      document.body.appendChild(s);
+
+    });
+  }
+
+  // 4) Render/refresh once the container exists
+  function renderJdgm() {
+
+    if (!window.jdgm) return;
+
+    // Judge.me exposes one of these depending on version/config.
+    if (typeof window.jdgm.refreshWidgets === "function") {
+      window.jdgm.refreshWidgets();
+    }
+
+    if (typeof window.jdgm.renderWidgets === "function") {
+      window.jdgm.renderWidgets();
+    }
+
+  }
+
+  // Run after load + after React has mounted the widget container
+  window.addEventListener("load", function () {
+
+    Promise.all([
+      loadJdgm(),
+      waitForEl(".jdgm-widget", 15000) // adjust selector if you use a different container class
+    ])
+      .then(function () {
+
+        // Give React a beat to finish any last render work
+        setTimeout(renderJdgm, 100);
+
+      })
+      .catch(function () {
+
+        // Optional: silence; or console.log for debugging
+
+      });
+
+  });
+
+</script>
+
+<script>
+(function(){
+
+  function ensureMainLandmark(){
+
+    const root = document.getElementById("root");
+
+    if(!root) return;
+
+    if(root.querySelector("main,[role='main']")) return;
+
+    const first = Array.from(root.children).find(
+      el => el.tagName !== "SCRIPT" && el.tagName !== "STYLE"
+    );
+
+    if(first)
+      first.setAttribute("role","main");
+
+  }
+
+  window.addEventListener("load",ensureMainLandmark);
+
+})();
+</script>
+
+<style>
+@keyframes animateToastList {
+  0% {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+</style>

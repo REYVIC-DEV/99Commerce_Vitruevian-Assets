@@ -1,0 +1,152 @@
+<style>
+  /* Base: desktop/tablet */
+  .lf-jdgm-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;
+    line-height: 1.2;
+  }
+
+  .lf-jdgm-inline .jdgm-prev-badge__stars {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-right: 2px;
+  }
+
+  .lf-jdgm-inline-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    flex: 0 1 auto;
+    white-space: nowrap;
+  }
+
+  /* Typography */
+  .lf-jdgm-inline-text .lf-jdgm-rating {
+    font-weight: 700;
+  }
+
+  .lf-jdgm-divider {
+    opacity: .6;
+  }
+
+  .lf-jdgm-bestseller {
+    font-weight: 600;
+    color: #279635;
+  }
+
+  /* Hide Judge.me default text */
+  .lf-jdgm-hide-default .jdgm-prev-badge__text,
+  .lf-jdgm-hide-default .jdgm-score-text {
+    display: none !important;
+  }
+
+  /* =========================
+     MOBILE
+     ========================= */
+  @media (max-width: 480px) {
+
+    .lf-jdgm-inline {
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .lf-jdgm-inline .jdgm-prev-badge__stars {
+      margin-right: 0;
+    }
+
+    .lf-jdgm-inline-text {
+      gap: 8px;
+      white-space: normal;
+      flex-wrap: wrap;
+      line-height: 17.48px;
+      font-size: 14.4px;
+      align-items: center;
+    }
+
+    .lf-jdgm-inline .jdgm-star {
+      transform: scale(0.92);
+      transform-origin: left center;
+    }
+
+  }
+
+  .jdgm-rev__timestamp {
+    color: #000000 !important;
+  }
+</style>
+
+<script>
+(function () {
+
+  const WIDGET_SEL = ".jdgm-widget.jdgm-preview-badge";
+  const BADGE_SEL = ".jdgm-prev-badge";
+  const STARS_SEL = ".jdgm-prev-badge__stars[data-score]";
+  const BUILT_ATTR = "data-lf-jdgm-built";
+
+  function buildForWidget(widget) {
+
+    const badge = widget.querySelector(BADGE_SEL);
+    if (!badge) return false;
+
+    if (badge.getAttribute(BUILT_ATTR) === "1") return true;
+
+    const stars = badge.querySelector(STARS_SEL);
+    if (!stars) return false;
+
+    const avgFromBadge = parseFloat(badge.getAttribute("data-average-rating") || "");
+    const avgFromStars = parseFloat(stars.getAttribute("data-score") || "");
+    const avg = !Number.isNaN(avgFromBadge) ? avgFromBadge : avgFromStars;
+
+    if (!Number.isFinite(avg)) return false;
+
+    const rounded = Math.round(avg * 10) / 10;
+
+    let inline = badge.querySelector(".lf-jdgm-inline");
+
+    if (!inline) {
+      inline = document.createElement("div");
+      inline.className = "lf-jdgm-inline";
+      badge.prepend(inline);
+    } else {
+      inline.innerHTML = "";
+    }
+
+    inline.appendChild(stars);
+
+    const text = document.createElement("div");
+    text.className = "lf-jdgm-inline-text";
+
+    text.innerHTML = `
+      <span class="lf-jdgm-rating">${rounded.toFixed(1)}</span>
+      <span class="lf-jdgm-divider">|</span>
+      <span class="lf-jdgm-bestseller">Best Seller</span>
+    `;
+
+    inline.appendChild(text);
+
+    badge.classList.add("lf-jdgm-hide-default");
+
+    badge.setAttribute(BUILT_ATTR, "1");
+
+    return true;
+  }
+
+  function buildAll() {
+    const widgets = document.querySelectorAll(WIDGET_SEL);
+    widgets.forEach((w) => buildForWidget(w));
+  }
+
+  buildAll();
+
+  const obs = new MutationObserver(() => buildAll());
+  obs.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+
+})();
+</script>

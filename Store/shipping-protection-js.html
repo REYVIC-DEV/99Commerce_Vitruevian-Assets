@@ -1,11 +1,25 @@
 <script>
 (function () {
+
   const SOURCE_SELECTOR = ".shipping-protection-cont input[type='checkbox']";
   const TARGET_SELECTOR = ".shipping-protection input[type='checkbox']";
-  const STORAGE_KEY = "lf_shipping_protection_choice"; // "1" or "0"
+  const STORAGE_KEY = "lf_shipping_protection_choice";
+
+  const SHIP_PRICE_SOURCE = ".shipping-protection .n0yWA";
+  const SHIP_TEXT_TARGET = ".shipping-protection-cont .dD2za";
 
   let syncing = false;
   let t = null;
+
+  function parsePrice(text) {
+    const currency = text.replace(/[0-9.,]/g, "").trim();
+    const number = parseFloat(text.replace(/[^0-9.]/g, ""));
+    return { currency, number };
+  }
+
+  function formatPrice(currency, value) {
+    return currency + value.toFixed(2);
+  }
 
   function getStored() {
     const v = localStorage.getItem(STORAGE_KEY);
@@ -26,59 +40,76 @@
     return all.find(el => !el.disabled && el.offsetParent !== null) || all[0] || null;
   }
 
-  // React-safe: force the SOURCE toggle to match storage using click when needed
+  function getShippingPrice() {
+    const el = document.querySelector(SHIP_PRICE_SOURCE);
+    if (!el) return null;
+    return parsePrice(el.textContent.trim());
+  }
+
+  function updateShippingLabel() {
+    const ship = getShippingPrice();
+    const label = document.querySelector(SHIP_TEXT_TARGET);
+
+    if (!ship || !label) return;
+
+    const text = "Add shipping protection just " + formatPrice(ship.currency, ship.number);
+
+    if (label.textContent.trim() !== text) {
+      label.textContent = text;
+    }
+  }
+
   function forceSourceToStored(source, stored) {
     const want = stored === "1";
     if (source.checked === want) return;
 
     syncing = true;
-    source.click(); // flips React-controlled state reliably
+    source.click();
     syncing = false;
   }
 
-  // LF-safe: force the REAL bump checkbox to match stored using click when needed
   function forceTargetToStored(target, stored) {
     const want = stored === "1";
     if (target.checked === want) return;
 
     syncing = true;
-    target.click(); // this is what triggers price logic
+    target.click();
     syncing = false;
   }
 
   function bindAndSync() {
+
+    updateShippingLabel();
+
     const source = getSource();
     const target = getTarget();
 
-    // Nothing to do yet
     if (!source && !target) return;
 
-    // Ensure we have a stored value
     let stored = getStored();
+
     if (stored === null) {
-      // If source exists, initialize from it (default), else default to "1"
       if (source) setStoredFromBool(!!source.checked);
       else localStorage.setItem(STORAGE_KEY, "1");
       stored = getStored();
     }
 
-    // Always try to enforce stored state onto whichever elements exist
     if (source) forceSourceToStored(source, stored);
     if (target) forceTargetToStored(target, stored);
 
-    // Bind source -> storage + target (only once per mounted source)
     if (source && source.dataset.lfBound !== "1") {
       source.dataset.lfBound = "1";
 
       source.addEventListener("change", function () {
+
         if (syncing) return;
 
         const next = source.checked ? "1" : "0";
         localStorage.setItem(STORAGE_KEY, next);
 
-        // If bump exists, force it to match (click triggers LF logic)
         const freshTarget = getTarget();
         if (freshTarget) forceTargetToStored(freshTarget, next);
+
       });
     }
   }
@@ -88,14 +119,12 @@
     t = setTimeout(bindAndSync, 180);
   }
 
-  // Initial + after hydration
   document.addEventListener("DOMContentLoaded", delayedBindAndSync);
 
-  // Key part: when you open cart on PDP, React mounts the bump after the click
   document.body.addEventListener("click", delayedBindAndSync, true);
 
-  // Backup for other re-renders
   const mo = new MutationObserver(delayedBindAndSync);
   mo.observe(document.body, { childList: true, subtree: true });
+
 })();
 </script>
