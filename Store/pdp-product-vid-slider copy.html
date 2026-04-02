@@ -75,6 +75,10 @@
         type: "progressbar",
         clickable: true,
       },
+      navigation: {
+        nextEl: ".pdp-slider-vid-next",
+        prevEl: ".pdp-slider-vid-prev",
+      },
       on: {
         slideChangeTransitionStart() {
           // Pause all videos when slide changes (prevents multiple audio streams)
